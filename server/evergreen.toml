@@ -1,0 +1,16 @@
+
+host = "0.0.0.0"
+port = 8080
+
+[[plants]]
+amount_ml = 150
+name = "Karsten"
+# My spathiphyllum wallisii, which often has hanging leafs.
+# Named after a german TV legend.
+# "Was ist denn mit Karsten los?"
+
+[[plants]]
+amount_ml = 50
+name = "Bazil"
+# My bazil.
+# Named after Picture of Dorian Grey character Bazil.
