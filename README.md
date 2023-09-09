@@ -6,7 +6,7 @@
 ```
 cargo install ldproxy
 cargo install espflash
-cargo install espup
+cargo install espup  # requires make for openssl
 
 espup install
 

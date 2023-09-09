@@ -11,6 +11,10 @@ use std::{
     time::Duration,
 };
 
+use crate::query::content;
+
+mod query;
+
 fn main() {
     // It is necessary to call this function once. Otherwise some patches to the runtime
     // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
@@ -26,8 +30,8 @@ fn main() {
 
     wifi_driver
         .set_configuration(&Configuration::Client(ClientConfiguration {
-            ssid: "".into(),
-            password: "".into(),
+            ssid: env!("WIFI_SSID").into(),
+            password: env!("WIFI_PASS").into(),
             ..Default::default()
         }))
         .unwrap();
@@ -59,7 +63,8 @@ fn main() {
             continue;
         }
         let mut connector = connector.unwrap();
-        let res = connector.write_all(&"NO FUCKING WAY!!!!!\n".as_bytes());
+        let message = content();
+        let res = connector.write_all(&message.as_bytes());
         if let Err(e) = res {
             println!("Write error: {:?}", e);
             continue;
