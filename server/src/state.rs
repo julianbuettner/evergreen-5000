@@ -10,14 +10,14 @@ use thiserror::Error;
 const STATE_FILENAME: &str = "state.json";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct State {
+pub struct JsonState {
     pub last_planned_watering: chrono::NaiveDate,
     pub last_seen: chrono::NaiveDateTime,
     pub last_accu_percentage: f32,
 }
 
 #[derive(Debug, Clone)]
-pub struct StateManager {
+pub struct JsonStateManager {
     mutex: Arc<Mutex<()>>,
 }
 
@@ -29,14 +29,14 @@ pub enum StateError {
     Parse(#[from] serde_json::Error),
 }
 
-impl StateManager {
+impl JsonStateManager {
     pub fn new() -> Self {
         Self {
             mutex: Arc::new(Mutex::new(())),
         }
     }
 
-    pub fn get(&self) -> Result<State, StateError> {
+    pub fn get(&self) -> Result<JsonState, StateError> {
         let _guard = self.mutex.lock();
         let mut file = File::open(STATE_FILENAME)?;
         let mut buffer = String::new();
@@ -44,7 +44,7 @@ impl StateManager {
         Ok(serde_json::from_str(buffer.as_str())?)
     }
 
-    pub fn set(&self, state: State) -> Result<(), StateError> {
+    pub fn set(&self, state: JsonState) -> Result<(), StateError> {
         let _guard = self.mutex.lock();
         let mut file = OpenOptions::new()
             .create(true)
@@ -63,7 +63,7 @@ impl StateManager {
         }?;
 
         if state.is_none() {
-            let default_state = State {
+            let default_state = JsonState {
                 last_seen: NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
                 last_accu_percentage: 0.0,
                 last_planned_watering: NaiveDate::from_yo_opt(1970, 1).unwrap(),

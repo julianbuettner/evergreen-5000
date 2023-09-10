@@ -1,27 +1,35 @@
 use std::net::SocketAddr;
 
 use api::last_seen;
-use axum::{routing::get, Router};
+use axum::{
+    routing::{get, post},
+    Router,
+};
 
 use config::ConfigManager;
-use state::StateManager;
+use state::JsonStateManager;
 
-use crate::api::get_plant;
+use crate::{
+    api::{get_plant, test_watering},
+    watering_test::PendingWateringTest,
+};
 
 mod api;
 mod config;
 mod model;
 mod state;
+mod watering_test;
 
 #[derive(Clone)]
 pub struct GlobalState {
     pub config: ConfigManager,
-    pub state: StateManager,
+    pub json_state: JsonStateManager,
+    pub pending_warting_test: PendingWateringTest,
 }
 
 #[tokio::main]
 async fn main() {
-    let statemanager = StateManager::new();
+    let statemanager = JsonStateManager::new();
     if let Err(err) = statemanager.ensure_state() {
         eprintln!("Something is wrong with the state file.\n{}", err);
         eprintln!("Try fixing or deleting state.json and restart the program.");
@@ -43,11 +51,13 @@ async fn main() {
 
     let state = GlobalState {
         config: configmanager,
-        state: statemanager,
+        json_state: statemanager,
+        pending_warting_test: PendingWateringTest::new(),
     };
     let app = Router::new()
         .route("/lastseen", get(last_seen))
         .route("/plants", get(get_plant))
+        .route("/testwatering/:plantname", post(test_watering))
         .with_state(state);
 
     let addr = SocketAddr::from((host, port));

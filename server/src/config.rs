@@ -7,7 +7,7 @@ use std::{
 use thiserror::Error;
 
 use serde::{Deserialize, Serialize};
-use toml_edit::{Document, TomlError, Item, value};
+use toml_edit::{value, Document, TomlError};
 
 const CONFIG_FILENAME: &str = "evergreen.toml";
 const DEFAULT_HOST: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
@@ -15,8 +15,8 @@ const DEFAULT_PORT: u16 = 8080;
 
 #[derive(Serialize, Deserialize)]
 pub struct PlantConfig {
-    amount_ml: u32,
-    name: Option<String>,
+    pub amount_ml: u32,
+    pub name: String,
 }
 
 #[derive(Serialize, Deserialize)]
