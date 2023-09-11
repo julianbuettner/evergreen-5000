@@ -3,7 +3,8 @@ host = "0.0.0.0"
 port = 8080
 
 # INFO:
-# Plant order maps to pin order
+# Plant order maps to pin order.
+# Names must be unique.
 
 [[plants]]
 amount_ml = 150
@@ -13,7 +14,8 @@ name = "Karsten"
 # "Was ist denn mit Karsten los?"
 
 [[plants]]
-amount_ml = 50
+amount_ml = 345
 name = "Bazil"
 # My bazil.
 # Named after Picture of Dorian Grey character Bazil.
+l.

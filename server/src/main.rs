@@ -1,4 +1,4 @@
-use std::net::{SocketAddr, IpAddr};
+use std::net::{IpAddr, SocketAddr};
 
 use api_frontend::last_seen;
 use axum::{
@@ -10,17 +10,18 @@ use config::ConfigManager;
 use state::JsonStateManager;
 
 use crate::{
-    api_frontend::{get_plant, test_watering},
-    watering_test::PendingWateringTest, api_esp32::dequeue_jobs,
+    api_esp32::dequeue_jobs,
+    api_frontend::{get_plant, set_plant_amount_ml, test_watering},
+    watering_test::PendingWateringTest,
 };
 
+mod api_esp32;
 mod api_frontend;
 mod config;
+mod duration_calculation;
 mod model;
 mod state;
 mod watering_test;
-mod api_esp32;
-mod duration_calculation;
 
 #[derive(Clone)]
 pub struct GlobalState {
@@ -61,6 +62,7 @@ async fn main() {
         .route("/plants", get(get_plant))
         .route("/testwatering/:plantname", post(test_watering))
         .route("/dequeue_jobs", post(dequeue_jobs))
+        .route("/updateml/:plantname", post(set_plant_amount_ml))
         .with_state(state);
 
     let addr = SocketAddr::from((host, port));
