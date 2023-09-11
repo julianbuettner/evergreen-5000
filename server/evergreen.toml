@@ -2,6 +2,9 @@
 host = "0.0.0.0"
 port = 8080
 
+# INFO:
+# Plant order maps to pin order
+
 [[plants]]
 amount_ml = 150
 name = "Karsten"

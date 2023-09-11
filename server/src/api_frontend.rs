@@ -4,7 +4,7 @@ use axum::{
     Json,
 };
 
-use crate::{config::PlantConfig, model::LastSeenResponse, GlobalState};
+use crate::{config::PlantConfig, model::{LastSeenResponse, WateringJob}, GlobalState};
 
 pub async fn last_seen(state: State<GlobalState>) -> Json<Option<LastSeenResponse>> {
     let state_res = state.json_state.get();
@@ -30,26 +30,28 @@ pub async fn test_watering(
     plantname: Path<String>,
 ) -> (StatusCode, String) {
     let plants = state.config.get_plant_config().unwrap();
-    if plants
+    let plant_index = plants
         .iter()
-        .find(|c| c.name == plantname.as_ref())
-        .is_none()
+        .enumerate()
+        .find(|(_, c)| c.name == plantname.as_ref());
+    if plant_index.is_none()
     {
         return (StatusCode::BAD_REQUEST, "Plant not found".into());
     }
+    let plant_index = plant_index.unwrap();
+    let watering_job = WateringJob {
+        plant_index: plant_index.0,
+        duration_ms: plant_index.1.amount_ml as usize,
+    };
     let ack = state
         .pending_warting_test
-        .set_pending_job(plantname.to_string());
+        .set_pending_job(watering_job);
     match ack.await.await {
         Err(_) => (
             StatusCode::GONE,
             "Another testing job has been started".into(),
         ),
-        Ok(Err(_)) => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            "ESP failed to water plant".into(),
-        ),
-        Ok(Ok(_)) => (
+        Ok(_) => (
             StatusCode::OK,
             format!("Plant {} should have been watered", *plantname),
         ),

@@ -55,8 +55,8 @@ impl JsonStateManager {
         Ok(())
     }
 
-    pub fn ensure_state(&self) -> Result<(), StateError> {
-        let state = match self.get() {
+    pub fn ensure_state(&self) -> Result<JsonState, StateError> {
+        let mut state = match self.get() {
             Ok(s) => Ok(Some(s)),
             Err(StateError::Io(e)) if e.kind() == ErrorKind::NotFound => Ok(None),
             Err(e) => Err(e),
@@ -68,8 +68,9 @@ impl JsonStateManager {
                 last_accu_percentage: 0.0,
                 last_planned_watering: NaiveDate::from_yo_opt(1970, 1).unwrap(),
             };
-            self.set(default_state)?;
+            self.set(default_state.clone())?;
+            state = Some(default_state);
         }
-        Ok(())
+        Ok(state.expect("State should be Some()"))
     }
 }

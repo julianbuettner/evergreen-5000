@@ -1,24 +1,26 @@
-use std::net::SocketAddr;
+use std::net::{SocketAddr, IpAddr};
 
-use api::last_seen;
+use api_frontend::last_seen;
 use axum::{
     routing::{get, post},
-    Router,
+    Router, ServiceExt,
 };
 
 use config::ConfigManager;
 use state::JsonStateManager;
 
 use crate::{
-    api::{get_plant, test_watering},
-    watering_test::PendingWateringTest,
+    api_frontend::{get_plant, test_watering},
+    watering_test::PendingWateringTest, api_esp32::dequeue_jobs,
 };
 
-mod api;
+mod api_frontend;
 mod config;
 mod model;
 mod state;
 mod watering_test;
+mod api_esp32;
+mod duration_calculation;
 
 #[derive(Clone)]
 pub struct GlobalState {
@@ -58,11 +60,12 @@ async fn main() {
         .route("/lastseen", get(last_seen))
         .route("/plants", get(get_plant))
         .route("/testwatering/:plantname", post(test_watering))
+        .route("/dequeue_jobs", post(dequeue_jobs))
         .with_state(state);
 
     let addr = SocketAddr::from((host, port));
     axum::Server::bind(&addr)
-        .serve(app.into_make_service())
+        .serve(app.into_make_service_with_connect_info::<SocketAddr>())
         .await
         .unwrap();
 }
