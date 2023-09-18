@@ -35,7 +35,9 @@
 <div style="display: flex; flex-direction: row; justify-content: space-evenly;">
         <h1 style="color: white; font-family: comic;">Evergreen 5000</h1>
 </div>
-<div style="display: flex; flex-direction: row; justify-content: space-evenly;">
+<div 
+        class="info-header-box"
+>
         <h2 class="info-header">
                 Watering daily<br>
                 {waterClock}
@@ -43,12 +45,12 @@
         {#await lastSeenInfo}
                 <h2 class="info-header">Infos are loading...</h2>
         {:then lastSeen}
-        <h2 style="color: white; font-family: comic;">
-                Last contact:<br>
+        <h2 class="info-header">
+                Last contact<br>
                 {formatTimestamp(lastSeen.lastSeenTimestamp)}
         </h2>
-        <h2 style="color: white; font-family: comic;">
-                Battery:<br>
+        <h2 class="info-header">
+                Battery<br>
                 {lastSeen.lastBatteryPercentage}%
         </h2>
         {:catch error}
@@ -78,5 +80,17 @@
 .info-header {
         color: white;
         font-family: comic;
+        text-align: center;
+}
+
+.info-header-box {
+        display: flex;
+        flex-direction: row;
+        justify-content: space-evenly;
+        border: 3px solid white;
+        border-radius: 12px;
+        margin: 1%;
+        margin-left: 10%;
+        margin-right: 10%;
 }
 </style>
