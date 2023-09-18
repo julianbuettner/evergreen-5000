@@ -32,6 +32,7 @@ pub async fn get_plant(state: State<GlobalState>) -> Json<Vec<PlantConfig>> {
 }
 
 #[derive(Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 pub struct SetAmountMlQuery {
     amount_ml: usize,
 }

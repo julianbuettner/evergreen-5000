@@ -7,15 +7,15 @@ port = 8080
 # Names must be unique.
 
 [[plants]]
-amount_ml = 150
+amountMl = 500
 name = "Karsten"
 # My spathiphyllum wallisii, which often has hanging leafs.
 # Named after a german TV legend.
 # "Was ist denn mit Karsten los?"
 
 [[plants]]
-amount_ml = 345
+amountMl = 500
 name = "Bazil"
 # My bazil.
 # Named after Picture of Dorian Grey character Bazil.
-l.
+

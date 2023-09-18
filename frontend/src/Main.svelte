@@ -1,44 +1,82 @@
 <script>
+        import { onMount } from 'svelte';
         import Plant from './Plant.svelte';
 
         export let waterClock = "09:00h";
-        export let lastWateringError = null;
-        export let lastConnect = 0;
-        let lastConnectDate = new Date(lastConnect);
+        let plants = [];
+        let lastSeenInfo = {
+                lastSeenTimestamp: 0,
+                lastBatteryPercentage: 0.0,
+        }
+
+        async function getPlants() {
+                const response = await fetch('/api/plants');
+                return await response.json();
+        }
+        async function getLastSeen() {
+                const response = await fetch('/api/lastseen');
+                return await response.json();
+        };
+        function formatTimestamp(ts) {
+                const fromUnix = new Date(ts);
+                const month = fromUnix.getMonth() + 1;
+                const day = fromUnix.getDate();
+                const hours = fromUnix.getHours();
+                const minutes = fromUnix.getMinutes();
+                const seconds = fromUnix.getSeconds();
+                return hours + ":" + minutes + ":" + seconds + "h, " + day + "." + month;
+        }
+        onMount(() => {
+                plants = getPlants();
+                lastSeenInfo = getLastSeen();
+        })
 </script>
 
 <div style="display: flex; flex-direction: row; justify-content: space-evenly;">
         <h1 style="color: white; font-family: comic;">Evergreen 5000</h1>
 </div>
 <div style="display: flex; flex-direction: row; justify-content: space-evenly;">
-        <h2 style="color: white; font-family: comic;">
-                Watering daily at {waterClock}
-                <br>
-                {#if lastWateringError === null }
-                Last watering was okay.
-                {:else}
-                {lastWateringError}
-                {/if}
+        <h2 class="info-header">
+                Watering daily<br>
+                {waterClock}
         </h2>
+        {#await lastSeenInfo}
+                <h2 class="info-header">Infos are loading...</h2>
+        {:then lastSeen}
         <h2 style="color: white; font-family: comic;">
                 Last contact:<br>
-                {lastConnectDate.toISOString()}
+                {formatTimestamp(lastSeen.lastSeenTimestamp)}
         </h2>
+        <h2 style="color: white; font-family: comic;">
+                Battery:<br>
+                {lastSeen.lastBatteryPercentage}%
+        </h2>
+        {:catch error}
+                <p>Something went wrong: {error.message}
+        {/await}
 </div>
 
 
 <div style="display: flex; flex-direction: row; flex-wrap: wrap; justify-content: space-evenly;">
-        <Plant id=5 name="Bazel" amountMl="500"/>
-        <Plant id=5 name="Bazel" amountMl="500"/>
-        <Plant id=5 name="Bazel" amountMl="500"/>
-        <Plant id=5 name="Bazel" amountMl="500"/>
-        <Plant id=5 name="Bazel" amountMl="500"/>
-        <Plant id=5 name="Bazel" amountMl="500"/>
+        {#await plants}
+                <p>Plants are loading...</p>
+        {:then plantConfigs}
+                {#each plantConfigs as plantConfig}
+                <Plant {...plantConfig}/>
+                {/each}
+        {:catch error}
+                <p>Something went wrong: {error.message}
+        {/await}
 </div>
 
 <style>
 @font-face {
         font-family: comic;
         src: url("/coolvetica rg.otf");
+}
+
+.info-header {
+        color: white;
+        font-family: comic;
 }
 </style>

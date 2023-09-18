@@ -14,6 +14,7 @@ const DEFAULT_HOST: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
 const DEFAULT_PORT: u16 = 8080;
 
 #[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct PlantConfig {
     pub amount_ml: u32,
     pub name: String,
@@ -88,7 +89,7 @@ impl ConfigManager {
 
     pub fn put_plant_amount_ml(&self, index: usize, amount_ml: u32) -> Result<(), ConfigError> {
         let mut config = self.get_document()?;
-        config["plants"][index]["amount_ml"] = value(amount_ml as i64);
+        config["plants"][index]["amountMl"] = value(amount_ml as i64);
         let mut file = OpenOptions::new().write(true).open(CONFIG_FILENAME)?;
         file.write_all(config.to_string().as_bytes())?;
         Ok(())

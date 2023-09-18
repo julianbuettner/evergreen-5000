@@ -60,7 +60,7 @@ fn main() {
     let mut onboard_led = PinDriver::output(peripherals.pins.gpio2).unwrap();
     let mut toggle = true;
 
-    loop {
+    for _ in 0..10 {
         sleep(Duration::from_millis(25));
         match toggle {
             true => onboard_led.set_high().unwrap(),
@@ -82,4 +82,8 @@ fn main() {
             println!("Should have been written!");
         }
     }
+
+    println!("Going deep sleep");
+    wifi_driver.disconnect().unwrap();
+
 }
