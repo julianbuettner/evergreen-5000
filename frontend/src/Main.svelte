@@ -7,6 +7,7 @@
         let lastSeenInfo = {
                 lastSeenTimestamp: 0,
                 lastBatteryPercentage: 0.0,
+                lastWateringDate: '',
         }
 
         async function getPlants() {
@@ -18,13 +19,10 @@
                 return await response.json();
         };
         function formatTimestamp(ts) {
-                const fromUnix = new Date(ts);
-                const month = fromUnix.getMonth() + 1;
-                const day = fromUnix.getDate();
-                const hours = fromUnix.getHours();
-                const minutes = fromUnix.getMinutes();
-                const seconds = fromUnix.getSeconds();
-                return hours + ":" + minutes + ":" + seconds + "h, " + day + "." + month;
+                const fromUnix = new Date(ts * 1000);
+                const dateString = Intl.DateTimeFormat('de-de', {dateStyle: 'medium'}).format(fromUnix);
+                const timeString = Intl.DateTimeFormat('de-de', {timeStyle: 'medium'}).format(fromUnix);
+                return timeString + ", " + dateString;
         }
         onMount(() => {
                 plants = getPlants();
@@ -38,21 +36,25 @@
 <div 
         class="info-header-box"
 >
-        <h2 class="info-header">
+        <h3 class="info-header">
                 Watering daily<br>
                 {waterClock}
-        </h2>
+        </h3>
         {#await lastSeenInfo}
-                <h2 class="info-header">Infos are loading...</h2>
+                <h3 class="info-header">Infos are loading...</h3>
         {:then lastSeen}
-        <h2 class="info-header">
+        <h3 class="info-header" style="text-align: center">
                 Last contact<br>
                 {formatTimestamp(lastSeen.lastSeenTimestamp)}
-        </h2>
-        <h2 class="info-header">
+        </h3>
+        <h3 class="info-header" style="text-align: center">
+                Last watering<br>
+                {lastSeen.lastWateringDate}
+        </h3>
+        <h3 class="info-header" style="text-align: right">
                 Battery<br>
                 {lastSeen.lastBatteryPercentage}%
-        </h2>
+        </h3>
         {:catch error}
                 <p>Something went wrong: {error.message}
         {/await}
@@ -80,17 +82,16 @@
 .info-header {
         color: white;
         font-family: comic;
-        text-align: center;
 }
 
 .info-header-box {
         display: flex;
         flex-direction: row;
         justify-content: space-evenly;
-        border: 3px solid white;
-        border-radius: 12px;
+        /* border: 3px solid white; */
+        border-radius: 8px;
         margin: 1%;
-        margin-left: 10%;
-        margin-right: 10%;
+        margin-left: 8%;
+        margin-right: 8%;
 }
 </style>

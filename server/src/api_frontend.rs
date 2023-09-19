@@ -22,6 +22,7 @@ pub async fn last_seen(state: State<GlobalState>) -> Json<Option<LastSeenRespons
     let last_seen_response = LastSeenResponse {
         last_seen_timestamp: state.last_seen.timestamp(),
         last_battery_percentage: state.last_accu_percentage,
+        last_watering_date: state.last_planned_watering.to_string(),
     };
     Json(Some(last_seen_response))
 }

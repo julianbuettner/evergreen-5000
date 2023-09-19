@@ -5,6 +5,7 @@ use serde::Serialize;
 pub struct LastSeenResponse {
     pub last_seen_timestamp: i64,
     pub last_battery_percentage: f32,
+    pub last_watering_date: String,
 }
 
 #[derive(Debug, Serialize)]
