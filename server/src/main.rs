@@ -10,7 +10,7 @@ use config::ConfigManager;
 use state::JsonStateManager;
 
 use crate::{
-    api_esp32::dequeue_jobs,
+    api_esp32::{dequeue_jobs, sleep_recommendation_sec},
     api_frontend::{get_plant, set_plant_amount_ml, test_watering},
     watering_test::PendingWateringTest,
 };
@@ -63,6 +63,7 @@ async fn main() {
         .route("/testwatering/:plantname", post(test_watering))
         .route("/dequeue_jobs", post(dequeue_jobs))
         .route("/updateml/:plantname", post(set_plant_amount_ml))
+        .route("/sleep_recommendation", get(sleep_recommendation_sec))
         .with_state(state);
 
     let addr = SocketAddr::from((host, port));

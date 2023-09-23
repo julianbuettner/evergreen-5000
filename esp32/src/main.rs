@@ -1,5 +1,4 @@
 use esp_idf_sys as _; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
-use log::*;
 
 use embedded_svc::wifi::{ClientConfiguration, Configuration, Wifi};
 use esp_idf_hal::peripherals::Peripherals;
@@ -11,11 +10,17 @@ use std::{
     time::Duration,
 };
 
-use crate::query::content;
+use crate::{
+    deepsleep::deep_sleep, query::content, status_signaler::StatusSignaler,
+    wifi_connect::connect_to_wifi_with_timeout,
+};
 use embedded_hal::digital::v2::OutputPin;
 use esp_idf_hal::gpio::PinDriver;
 
+mod deepsleep;
 mod query;
+mod status_signaler;
+mod wifi_connect;
 
 fn main() {
     // It is necessary to call this function once. Otherwise some patches to the runtime
@@ -28,37 +33,27 @@ fn main() {
     let sys_loop = EspSystemEventLoop::take().unwrap();
     let nvs = EspDefaultNvsPartition::take().unwrap();
 
-    let mut wifi_driver = EspWifi::new(peripherals.modem, sys_loop, Some(nvs)).unwrap();
+    // Init LED status indicator
+    let pins = peripherals.pins;
+    let mut led_signaler = StatusSignaler::new(
+        pins.gpio4, // red
+        pins.gpio5, pins.gpio6, pins.gpio7, pins.gpio8,
+    );
+    let mut onboard_led = PinDriver::output(pins.gpio2).unwrap();
+    onboard_led.set_high().unwrap();
+    led_signaler.set_green_numer(1);
 
-    wifi_driver
-        .set_configuration(&Configuration::Client(ClientConfiguration {
-            ssid: env!("WIFI_SSID").into(),
-            password: env!("WIFI_PASS").into(),
-            ..Default::default()
-        }))
-        .unwrap();
-
-    wifi_driver.start().unwrap();
-    wifi_driver.connect().unwrap();
-    while !wifi_driver.is_connected().unwrap() {
-        let config = wifi_driver.get_configuration().unwrap();
-        println!("Waiting for station {:?}", config);
-        sleep(Duration::from_millis(250));
+    let wifi_res =
+        connect_to_wifi_with_timeout(Duration::from_secs(10), peripherals.modem, sys_loop, nvs);
+    if wifi_res.is_err() {
+        panic!("Could not connect to wifi!");
     }
+    let mut wifi_driver = wifi_res.unwrap();
 
-    println!("Should be connected now");
-    for _ in 0..10 {
-        let ip_info = wifi_driver.sta_netif().get_ip_info().unwrap();
-        println!("IP info: {:?}", ip_info);
-        if ip_info.ip != Ipv4Addr::new(0, 0, 0, 0) {
-            println!("Got IP!");
-            break;
-        }
-        sleep(Duration::from_millis(250));
-    }
-
-    let mut onboard_led = PinDriver::output(peripherals.pins.gpio2).unwrap();
     let mut toggle = true;
+    onboard_led.set_high().unwrap();
+    sleep(Duration::from_millis(1000));
+    onboard_led.set_low().unwrap();
 
     for _ in 0..10 {
         sleep(Duration::from_millis(25));
@@ -85,5 +80,5 @@ fn main() {
 
     println!("Going deep sleep");
     wifi_driver.disconnect().unwrap();
-
+    deepsleep::deep_sleep(Duration::from_secs(10));
 }

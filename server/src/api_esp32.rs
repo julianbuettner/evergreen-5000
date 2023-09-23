@@ -82,3 +82,9 @@ pub async fn dequeue_jobs(
 
     (StatusCode::OK, Ok(Json(jobs)))
 }
+
+pub async fn sleep_recommendation_sec() -> String {
+    // TODO replace by actual implementation,
+    // Sleep for multiple hours to save maximum energy.
+    "900".into()
+}
