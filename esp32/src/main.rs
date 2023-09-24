@@ -1,7 +1,12 @@
+use enumset::{EnumSet, enum_set};
+use esp_idf_hal::{units::KiloHertz, task::watchdog::TWDTConfig, cpu::Core};
 use esp_idf_sys as _; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
 
 use embedded_svc::wifi::{ClientConfiguration, Configuration, Wifi};
-use esp_idf_hal::peripherals::Peripherals;
+use esp_idf_hal::{
+    ledc::{LedcDriver, LedcTimerDriver},
+    peripherals::Peripherals,
+};
 use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::EspDefaultNvsPartition, wifi::EspWifi};
 use std::{
     io::Write,
@@ -20,6 +25,7 @@ use esp_idf_hal::gpio::PinDriver;
 mod deepsleep;
 mod query;
 mod status_signaler;
+mod pumps;
 mod wifi_connect;
 
 fn main() {
@@ -33,16 +39,30 @@ fn main() {
     let sys_loop = EspSystemEventLoop::take().unwrap();
     let nvs = EspDefaultNvsPartition::take().unwrap();
 
+    // WATCHDOG
+    // So, the code restarted automatically after a few seconds
+    // because of some watchdog thing. I could not `feed` it,
+    // it stopped anyways. But settings the timer high worked somehow.
+    // So it's not 3 min and I don't touch it. Help is appreciated.
+    let config = TWDTConfig {
+        duration: Duration::from_secs(180),
+        panic_on_trigger: true,
+        subscribed_idle_tasks: enum_set!(Core::Core0)
+    };
+    let mut driver = esp_idf_hal::task::watchdog::TWDTDriver::new(peripherals.twdt, &config).unwrap();
+    let mut watchdog = driver.watch_current_task().unwrap();
+
     // Init LED status indicator
+    println!("Init LED Signaler");
     let pins = peripherals.pins;
     let mut led_signaler = StatusSignaler::new(
-        pins.gpio4, // red
-        pins.gpio5, pins.gpio6, pins.gpio7, pins.gpio8,
+        pins.gpio27, // red
+        // 2 onboard, make to 26
+        pins.gpio2, pins.gpio25, pins.gpio33, pins.gpio32,
     );
-    let mut onboard_led = PinDriver::output(pins.gpio2).unwrap();
-    onboard_led.set_high().unwrap();
     led_signaler.set_green_numer(1);
 
+    println!("Connect to Wifi");
     let wifi_res =
         connect_to_wifi_with_timeout(Duration::from_secs(10), peripherals.modem, sys_loop, nvs);
     if wifi_res.is_err() {
@@ -50,35 +70,23 @@ fn main() {
     }
     let mut wifi_driver = wifi_res.unwrap();
 
-    let mut toggle = true;
-    onboard_led.set_high().unwrap();
-    sleep(Duration::from_millis(1000));
-    onboard_led.set_low().unwrap();
+    let timer_driver = LedcTimerDriver::new(
+        peripherals.ledc.timer0,
+        &esp_idf_hal::ledc::config::TimerConfig::default().frequency(KiloHertz(10_u32).into()),
+    )
+    .unwrap();
+    let mut driver = LedcDriver::new(peripherals.ledc.channel0, timer_driver, pins.gpio23).unwrap();
+    let max_duty = driver.get_max_duty();
 
-    for _ in 0..10 {
-        sleep(Duration::from_millis(25));
-        match toggle {
-            true => onboard_led.set_high().unwrap(),
-            false => onboard_led.set_low().unwrap(),
-        };
-        toggle = !toggle;
-        let mut connector = TcpStream::connect("192.168.0.192:9999");
-        if let Err(e) = connector {
-            println!("Connection error: {:?}", e);
-            continue;
-        }
-        let mut connector = connector.unwrap();
-        let message = content();
-        let res = connector.write_all(&message.as_bytes());
-        if let Err(e) = res {
-            println!("Write error: {:?}", e);
-            continue;
-        } else {
-            println!("Should have been written!");
+    let steps = 999;
+    for _ in 0..999 {
+        for i in 0..steps {
+            driver.set_duty(max_duty * i / steps).unwrap();
+            sleep(Duration::from_millis(2));
         }
     }
 
     println!("Going deep sleep");
-    wifi_driver.disconnect().unwrap();
-    deepsleep::deep_sleep(Duration::from_secs(10));
+    // wifi_driver.disconnect().unwrap();
+    deepsleep::deep_sleep(Duration::from_secs(2));
 }
