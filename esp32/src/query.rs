@@ -1,16 +1,17 @@
 use std::time::Duration;
 
-use embedded_svc::http::{self, client::*, status, Headers, Status};
-use embedded_svc::io::Read;
+use embedded_svc::http::client::*;
+use embedded_svc::io::{Read, Write};
 use embedded_svc::utils::io;
 use esp_idf_svc::http::client::*;
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 
 // TODO: resistance against trailing slash
 // e.g. https://myserver.dev/evergreen/api, no tailing slash
 const BASE_URL: &str = env!("API_BASE_URL");
 const API_SECRET: &str = env!("API_SECRET");
 
+#[derive(Debug)]
 pub enum QueryError {
     Connection,         // HTTP, TLS
     UnexpectedResponse, // mal formatted Json, 404, unexpected format
@@ -50,16 +51,17 @@ pub fn fetch_jobs(accu_percentage: f32) -> Result<Jobs, QueryError> {
         .unwrap(),
     );
 
-    // ESP has 520KiB RAM.
-    let mut buffer = [0u8; 10 * 1024];
+    // 10KiB make overflow
+    let mut buffer = [0_u8; 128];
 
     // Get Jobs
-    let url = format!("{}/dequeue_json", BASE_URL);
-    let accu_percentage_string = accu_percentage.to_string();
-    let headers = [("accu_percentage", accu_percentage_string.as_str())];
-    let mut response = client.post(&url, &headers).unwrap().submit().unwrap();
+    let url = format!("{}/dequeue_json?accu_percentage={}", BASE_URL, accu_percentage);
+    let request = client.post(&url, &[]).unwrap();
+    let mut response = request.submit().unwrap();
     let read = io::try_read_full(&mut response, &mut buffer).map_err(|_| QueryError::Connection)?;
+    println!("Bytes read1: {}", read);
     let body = String::from_utf8_lossy(&buffer[..read]).into_owned();
+    println!("Response1: {}", body);
 
     let server_jobs: Vec<ServerWateringJob> =
         serde_json::from_str(&body).map_err(|_| QueryError::UnexpectedResponse)?;
@@ -68,6 +70,7 @@ pub fn fetch_jobs(accu_percentage: f32) -> Result<Jobs, QueryError> {
     let mut response = client.get(&url).unwrap().submit().unwrap();
     let read = io::try_read_full(&mut response, &mut buffer).map_err(|_| QueryError::Connection)?;
     let body = String::from_utf8_lossy(&buffer[..read]).into_owned();
+    println!("Response2: {}", body);
 
     let sleep_recommendation_sec: u64 = body.parse().map_err(|_| QueryError::UnexpectedResponse)?;
 
@@ -77,29 +80,3 @@ pub fn fetch_jobs(accu_percentage: f32) -> Result<Jobs, QueryError> {
     })
 }
 
-pub fn content() -> String {
-    let url = String::from("https://whatthecommit.com/index.txt");
-
-    println!("About to fetch content from {}", url);
-    let mut client = Client::wrap(
-        EspHttpConnection::new(&Configuration {
-            crt_bundle_attach: Some(esp_idf_sys::esp_crt_bundle_attach),
-            ..Default::default()
-        })
-        .unwrap(),
-    );
-
-    let mut response = client.get(&url).unwrap().submit().unwrap();
-    let mut body = [0_u8; 3048];
-    let read = io::try_read_full(&mut response, &mut body)
-        .map_err(|err| err.0)
-        .unwrap();
-
-    let message = String::from_utf8_lossy(&body[..read]).into_owned();
-    println!("Body (truncated to 3K):\n{:?}", message);
-
-    // Complete the response
-    while response.read(&mut body).unwrap() > 0 {}
-
-    message
-}

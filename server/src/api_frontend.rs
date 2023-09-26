@@ -51,18 +51,19 @@ pub async fn set_plant_amount_ml(
         );
     }
     let plants = plants.unwrap();
-    let plant = plants
-        .iter()
-        .enumerate()
-        .find(|p| p.1.name == name);
+    let plant = plants.iter().enumerate().find(|p| p.1.name == name);
     match plant {
-        Some(plant) => {
-            match state.config.put_plant_amount_ml(plant.0, amount_ml as u32) {
-                Ok(_) => (StatusCode::OK, format!("Plant {} now gets {}ml/day", name, amount_ml)),
-                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, format!("Error saving config: {}", e)),
-            }
-        }
-        None => (StatusCode::NOT_FOUND, format!("Plant {} not found", name))
+        Some(plant) => match state.config.put_plant_amount_ml(plant.0, amount_ml as u32) {
+            Ok(_) => (
+                StatusCode::OK,
+                format!("Plant {} now gets {}ml/day", name, amount_ml),
+            ),
+            Err(e) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                format!("Error saving config: {}", e),
+            ),
+        },
+        None => (StatusCode::NOT_FOUND, format!("Plant {} not found", name)),
     }
 }
 

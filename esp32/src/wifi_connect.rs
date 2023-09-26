@@ -1,8 +1,8 @@
 use std::{time::{Duration, Instant}, thread::sleep, net::Ipv4Addr};
 
-use embedded_svc::wifi::ClientConfiguration;
-use esp_idf_hal::{prelude::Peripherals, modem::{WifiModemPeripheral, Modem}};
-use esp_idf_svc::{eventloop::{EspEventLoop, System}, nvs::{EspNvsPartition, NvsDefault}, wifi::{EspWifi, WifiDriver}};
+
+use esp_idf_hal::{modem::{Modem}};
+use esp_idf_svc::{eventloop::{EspEventLoop, System}, nvs::{EspNvsPartition, NvsDefault}, wifi::{EspWifi}};
 use embedded_svc::wifi::{ClientConfiguration as WifiClientConfiguration, Configuration, Wifi};
 
 
@@ -14,12 +14,25 @@ pub enum WifiErr {
     WrongCredentials,
 }
 
+pub struct WifiConnection<'a> {
+    wifi_driver: EspWifi<'a>,
+}
+
+impl Drop for WifiConnection<'_> {
+    fn drop(&mut self) {
+        match self.wifi_driver.disconnect() {
+            Err(_) => println!("Failed to disconnect wifi!"),
+            _ => (),
+        }
+    }
+}
+
 pub fn connect_to_wifi_with_timeout(
     timeout: Duration,
     modem: Modem,
     sys_loop: EspEventLoop<System>,
     nvs: EspNvsPartition<NvsDefault>,
-    ) -> Result<EspWifi<'static>, WifiErr> {
+    ) -> Result<WifiConnection<'static>, WifiErr> {
     let mut wifi_driver = EspWifi::new(modem, sys_loop, Some(nvs)).unwrap();
     wifi_driver
         .set_configuration(&Configuration::Client(WifiClientConfiguration {
@@ -38,13 +51,12 @@ pub fn connect_to_wifi_with_timeout(
         if task_start.elapsed() > timeout {
             return Err(WifiErr::TimeoutConnect);
         }
-        sleep(Duration::from_millis(100));
+        sleep(Duration::from_millis(250));
     }
     println!("Connected to wifi!");
 
     loop {
         let ip_info = wifi_driver.sta_netif().get_ip_info().unwrap();
-        println!("IP info: {:?}", ip_info);
         if ip_info.ip != Ipv4Addr::new(0, 0, 0, 0) {
             println!("Got IP!");
             break;
@@ -52,8 +64,8 @@ pub fn connect_to_wifi_with_timeout(
         if task_start.elapsed() > timeout {
             return Err(WifiErr::TimeoutIp);
         }
-        sleep(Duration::from_millis(250));
+        sleep(Duration::from_millis(150));
     }
 
-    Ok(wifi_driver)
+    Ok(WifiConnection { wifi_driver })
 }

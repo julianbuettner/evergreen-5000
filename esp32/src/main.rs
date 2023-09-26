@@ -1,31 +1,26 @@
-use enumset::{EnumSet, enum_set};
-use esp_idf_hal::{units::KiloHertz, task::watchdog::TWDTConfig, cpu::Core};
+use enumset::enum_set;
+use esp_idf_hal::{
+    cpu::Core, gpio::AnyOutputPin, peripheral::Peripheral, task::watchdog::TWDTConfig,
+    units::KiloHertz,
+};
 use esp_idf_sys as _; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
 
-use embedded_svc::wifi::{ClientConfiguration, Configuration, Wifi};
 use esp_idf_hal::{
     ledc::{LedcDriver, LedcTimerDriver},
     peripherals::Peripherals,
 };
-use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::EspDefaultNvsPartition, wifi::EspWifi};
-use std::{
-    io::Write,
-    net::{Ipv4Addr, TcpListener, TcpStream},
-    thread::sleep,
-    time::Duration,
-};
+use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::EspDefaultNvsPartition};
+use std::{thread::sleep, time::Duration};
 
 use crate::{
-    deepsleep::deep_sleep, query::content, status_signaler::StatusSignaler,
+    deepsleep::deep_sleep, pumps::Pumps, query::fetch_jobs, status_signaler::StatusSignaler,
     wifi_connect::connect_to_wifi_with_timeout,
 };
-use embedded_hal::digital::v2::OutputPin;
-use esp_idf_hal::gpio::PinDriver;
 
 mod deepsleep;
+mod pumps;
 mod query;
 mod status_signaler;
-mod pumps;
 mod wifi_connect;
 
 fn main() {
@@ -47,46 +42,72 @@ fn main() {
     let config = TWDTConfig {
         duration: Duration::from_secs(180),
         panic_on_trigger: true,
-        subscribed_idle_tasks: enum_set!(Core::Core0)
+        subscribed_idle_tasks: enum_set!(Core::Core0),
     };
-    let mut driver = esp_idf_hal::task::watchdog::TWDTDriver::new(peripherals.twdt, &config).unwrap();
-    let mut watchdog = driver.watch_current_task().unwrap();
+    let mut driver =
+        esp_idf_hal::task::watchdog::TWDTDriver::new(peripherals.twdt, &config).unwrap();
+    let _watchdog = driver.watch_current_task().unwrap();
 
     // Init LED status indicator
     println!("Init LED Signaler");
     let pins = peripherals.pins;
     let mut led_signaler = StatusSignaler::new(
-        pins.gpio27, // red
-        // 2 onboard, make to 26
-        pins.gpio2, pins.gpio25, pins.gpio33, pins.gpio32,
+        AnyOutputPin::from(pins.gpio13).into_ref(),
+        vec![
+            AnyOutputPin::from(pins.gpio12).into_ref(),
+            AnyOutputPin::from(pins.gpio14).into_ref(),
+            AnyOutputPin::from(pins.gpio27).into_ref(),
+        ],
     );
+    let mut pumps = Pumps::new(
+        peripherals.ledc.timer0.into_ref(),
+        peripherals.ledc.channel0.into_ref(),
+        vec![
+            AnyOutputPin::from(pins.gpio22).into_ref(),
+            AnyOutputPin::from(pins.gpio23).into_ref(),
+        ],
+    );
+
     led_signaler.set_green_numer(1);
+    let jobs = {
+        println!("Connect to Wifi");
+        let wifi_res =
+            connect_to_wifi_with_timeout(Duration::from_secs(10), peripherals.modem, sys_loop, nvs);
+        if wifi_res.is_err() {
+            led_signaler.error_led_on();
+            println!("Could not connect to wifi!");
+            sleep(Duration::from_secs(10));
+            deep_sleep(Duration::from_secs(3600));
+        }
+        let _wifi_driver = wifi_res.unwrap();
 
-    println!("Connect to Wifi");
-    let wifi_res =
-        connect_to_wifi_with_timeout(Duration::from_secs(10), peripherals.modem, sys_loop, nvs);
-    if wifi_res.is_err() {
-        panic!("Could not connect to wifi!");
+        led_signaler.set_green_numer(2);
+        println!("Fetching ESP todos...");
+        fetch_jobs(100.) // drop and disconnect wifi
+    };
+    if let Err(e) = jobs {
+        println!("Error fetching jobs: {:?}", e);
+        led_signaler.error_led_on();
+        sleep(Duration::from_secs(10));
+        drop(led_signaler);
+        deep_sleep(Duration::from_secs(900));
     }
-    let mut wifi_driver = wifi_res.unwrap();
+    let jobs = jobs.unwrap();
 
-    let timer_driver = LedcTimerDriver::new(
-        peripherals.ledc.timer0,
-        &esp_idf_hal::ledc::config::TimerConfig::default().frequency(KiloHertz(10_u32).into()),
-    )
-    .unwrap();
-    let mut driver = LedcDriver::new(peripherals.ledc.channel0, timer_driver, pins.gpio23).unwrap();
-    let max_duty = driver.get_max_duty();
-
-    let steps = 999;
-    for _ in 0..999 {
-        for i in 0..steps {
-            driver.set_duty(max_duty * i / steps).unwrap();
-            sleep(Duration::from_millis(2));
+    led_signaler.set_green_numer(3);
+    for (index, duration) in jobs.plantings.iter().enumerate() {
+        if duration.is_zero() {
+            continue;
+        }
+        match pumps.pump(index, duration.clone()) {
+            Some(_) => (),
+            None => println!("Warning. No pump connected to {}", index),
         }
     }
 
     println!("Going deep sleep");
+    led_signaler.set_full_green();
+    sleep(Duration::from_secs(1));
     // wifi_driver.disconnect().unwrap();
-    deepsleep::deep_sleep(Duration::from_secs(2));
+    deepsleep::deep_sleep(jobs.sleep_recommendation);
 }

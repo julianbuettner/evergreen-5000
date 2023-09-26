@@ -1,4 +1,7 @@
-use esp_idf_hal::gpio::{Output, OutputPin, PinDriver};
+use esp_idf_hal::{
+    gpio::{AnyOutputPin, Output, OutputPin, PinDriver},
+    peripheral::PeripheralRef,
+};
 
 /// To signal what the box containing the
 /// ESP32 is doing, a few LEDs should be installed and pointed
@@ -22,80 +25,57 @@ use esp_idf_hal::gpio::{Output, OutputPin, PinDriver};
 /// If a step did not succeed, the red
 /// LED can be turned on.
 
-pub struct StatusSignaler<
-    'a,
-    Red: OutputPin,
-    Green1: OutputPin,
-    Green2: OutputPin,
-    Green3: OutputPin,
-    Green4: OutputPin,
-> {
-    red: PinDriver<'a, Red, Output>,
-    green1: PinDriver<'a, Green1, Output>,
-    green2: PinDriver<'a, Green2, Output>,
-    green3: PinDriver<'a, Green3, Output>,
-    green4: PinDriver<'a, Green4, Output>,
+pub struct StatusSignaler<'a> {
+    red_driver: PinDriver<'a, AnyOutputPin, Output>,
+    // red: PeripheralRef<'a, AnyOutputPin>,
+    green_driver: Vec<PinDriver<'a, AnyOutputPin, Output>>,
 }
 
-impl<
-        'a,
-        Red: OutputPin,
-        Green1: OutputPin,
-        Green2: OutputPin,
-        Green3: OutputPin,
-        Green4: OutputPin,
-    > StatusSignaler<'a, Red, Green1, Green2, Green3, Green4>
-{
+impl Drop for StatusSignaler<'_> {
+    fn drop(&mut self) {
+        self.off();
+    }
+}
+
+impl<'a> StatusSignaler<'a> {
     pub fn new(
-        red: Red,
-        green1: Green1,
-        green2: Green2,
-        green3: Green3,
-        green4: Green4,
-    ) -> StatusSignaler<'a, Red, Green1, Green2, Green3, Green4> {
-        Self {
-            red: PinDriver::output(red).unwrap(),
-            green1: PinDriver::output(green1).unwrap(),
-            green2: PinDriver::output(green2).unwrap(),
-            green3: PinDriver::output(green3).unwrap(),
-            green4: PinDriver::output(green4).unwrap(),
+        red: PeripheralRef<'a, AnyOutputPin>,
+        green: Vec<PeripheralRef<'a, AnyOutputPin>>,
+    ) -> StatusSignaler<'a> {
+        let mut red_driver = PinDriver::output(red).unwrap();
+        red_driver.set_low().unwrap();
+        let mut green_driver: Vec<PinDriver<AnyOutputPin, Output>> = green.into_iter()
+            .map(|p| PinDriver::output(p).unwrap())
+            .collect();
+        for g in green_driver.iter_mut() {
+            g.set_low().unwrap();
         }
+        Self { red_driver, green_driver }
     }
 
     pub fn error_led_on(&mut self) {
-        self.red.set_high().unwrap()
-    }
-
-    pub fn error_led_off(&mut self) {
-        self.red.set_low().unwrap()
+        self.red_driver.set_high().unwrap();
     }
 
     pub fn set_green_numer(&mut self, num: u8) {
-        let (g1, g2, g3, g4) = (
-            (num >> 0) % 2 == 1,
-            (num >> 1) % 2 == 1,
-            (num >> 2) % 2 == 1,
-            (num >> 3) % 2 == 1,
-        );
-        match g1 {
-            true => self.green1.set_high().unwrap(),
-            false => self.green1.set_low().unwrap(),
-        }
-        match g2 {
-            true => self.green2.set_high().unwrap(),
-            false => self.green2.set_low().unwrap(),
-        }
-        match g3 {
-            true => self.green3.set_high().unwrap(),
-            false => self.green3.set_low().unwrap(),
-        }
-        match g4 {
-            true => self.green4.set_high().unwrap(),
-            false => self.green4.set_low().unwrap(),
+        for (i, pin) in self.green_driver.iter_mut().enumerate() {
+            match (num >> i) % 2 == 1 {
+                true => pin.set_high().unwrap(),
+                false => pin.set_low().unwrap(),
+            }
         }
     }
 
     pub fn set_full_green(&mut self) {
-        self.set_green_numer(u8::MAX)
+        for pin in self.green_driver.iter_mut() {
+            pin.set_high().unwrap();
+        }
+    }
+
+    pub fn off(&mut self) {
+        for p in self.green_driver.iter_mut() {
+            p.set_low().unwrap();
+        }
+        self.red_driver.set_low().unwrap();
     }
 }
