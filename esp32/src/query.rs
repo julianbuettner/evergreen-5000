@@ -55,7 +55,7 @@ pub fn fetch_jobs(accu_percentage: f32) -> Result<Jobs, QueryError> {
     let mut buffer = [0_u8; 128];
 
     // Get Jobs
-    let url = format!("{}/dequeue_json?accu_percentage={}", BASE_URL, accu_percentage);
+    let url = format!("{}/dequeue_jobs?accu_percentage={}", BASE_URL, accu_percentage);
     let request = client.post(&url, &[]).unwrap();
     let mut response = request.submit().unwrap();
     let read = io::try_read_full(&mut response, &mut buffer).map_err(|_| QueryError::Connection)?;
