@@ -47,6 +47,7 @@ pub fn fetch_jobs(accu_percentage: f32) -> Result<DequeueJobs, QueryError> {
         "{}/dequeue_jobs?accu_percentage={}&api_secret={}",
         BASE_URL, accu_percentage, API_SECRET
     );
+    println!("POST {}", url);
     let request = client.post(&url, &[]).unwrap();
     let mut response = request.submit().unwrap();
     let read = io::try_read_full(&mut response, &mut buffer).map_err(|_| QueryError::Connection)?;

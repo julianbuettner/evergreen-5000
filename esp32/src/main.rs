@@ -106,7 +106,7 @@ fn routine(
     drop(pumps);
 
     led_signaler.set_full_green();
-    sleep(Duration::from_secs(2));
+    sleep(Duration::from_secs(5));
     Duration::from_secs(jobs.sleep_recommendation_seconds)
 }
 
