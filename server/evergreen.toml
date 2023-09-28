@@ -1,6 +1,7 @@
 
 host = "0.0.0.0"
 port = 8080
+api_secret = "esp32-secret-replace-me"
 
 # INFO:
 # Plant order maps to pin order.

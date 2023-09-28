@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     fs::{File, OpenOptions},
     io::{ErrorKind, Read, Write},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex}, net::{IpAddr, Ipv4Addr},
 };
 use thiserror::Error;
 
@@ -14,6 +14,7 @@ pub struct JsonState {
     pub last_planned_watering: chrono::NaiveDate,
     pub last_seen: chrono::NaiveDateTime,
     pub last_accu_percentage: f32,
+    pub last_ip: IpAddr,
 }
 
 #[derive(Debug, Clone)]
@@ -67,6 +68,7 @@ impl JsonStateManager {
                 last_seen: NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
                 last_accu_percentage: 0.0,
                 last_planned_watering: NaiveDate::from_yo_opt(1970, 1).unwrap(),
+                last_ip: IpAddr::V4(Ipv4Addr::new(127,0,0,1)),
             };
             self.set(default_state.clone())?;
             state = Some(default_state);

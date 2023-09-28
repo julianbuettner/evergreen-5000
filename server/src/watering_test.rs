@@ -19,7 +19,7 @@ impl<T> Task<T> {
     }
 
     pub fn destruct_and_ack(self) -> T {
-        self.ack.send(());
+        let _ = self.ack.send(());
         self.value
     }
 }
@@ -36,7 +36,7 @@ impl PendingWateringTest {
         }
     }
 
-    pub async fn set_pending_job(&self, plant_id: WateringJob) -> (Receiver<()>) {
+    pub async fn set_pending_job(&self, plant_id: WateringJob) -> Receiver<()> {
         let (task, response) = Task::new(plant_id);
         let mut inner = self.inner.lock().await;
         let _ = inner.insert(task);

@@ -1,16 +1,19 @@
-use std::net::{IpAddr, SocketAddr};
+use std::net::SocketAddr;
 
 use api_frontend::last_seen;
 use axum::{
+    http::StatusCode,
     routing::{get, post},
-    Router, ServiceExt,
+    Router,
 };
 
+use axum_client_ip::SecureClientIpSource;
 use config::ConfigManager;
+use log::info;
 use state::JsonStateManager;
 
 use crate::{
-    api_esp32::{dequeue_jobs, sleep_recommendation_sec},
+    api_esp32::dequeue_jobs,
     api_frontend::{get_plant, set_plant_amount_ml, test_watering},
     watering_test::PendingWateringTest,
 };
@@ -18,7 +21,6 @@ use crate::{
 mod api_esp32;
 mod api_frontend;
 mod config;
-mod duration_calculation;
 mod model;
 mod state;
 mod watering_test;
@@ -30,8 +32,15 @@ pub struct GlobalState {
     pub pending_warting_test: PendingWateringTest,
 }
 
+async fn handler_404() -> (StatusCode, &'static str) {
+    info!("Got request with no matched endpoint: 404");
+    (StatusCode::NOT_FOUND, "Path, query or body mismatch.")
+}
+
 #[tokio::main]
 async fn main() {
+    tracing_subscriber::fmt::init();
+
     let statemanager = JsonStateManager::new();
     if let Err(err) = statemanager.ensure_state() {
         eprintln!("Something is wrong with the state file.\n{}", err);
@@ -63,7 +72,9 @@ async fn main() {
         .route("/testwatering/:plantname", post(test_watering))
         .route("/dequeue_jobs", post(dequeue_jobs))
         .route("/updateml/:plantname", post(set_plant_amount_ml))
-        .route("/sleep_recommendation", get(sleep_recommendation_sec))
+        .fallback(handler_404)
+        // Using X-Real-IP, as done by Nginx
+        .layer(SecureClientIpSource::XRealIp.into_extension())
         .with_state(state);
 
     let addr = SocketAddr::from((host, port));

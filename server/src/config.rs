@@ -4,6 +4,7 @@ use std::{
     net::{IpAddr, Ipv4Addr},
     sync::{Arc, Mutex},
 };
+use log::debug;
 use thiserror::Error;
 
 use serde::{Deserialize, Serialize};
@@ -24,6 +25,7 @@ pub struct PlantConfig {
 pub struct Config {
     host: Option<IpAddr>,
     port: Option<u16>,
+    api_secret: String,
     plants: Vec<PlantConfig>,
 }
 
@@ -92,6 +94,7 @@ impl ConfigManager {
         config["plants"][index]["amountMl"] = value(amount_ml as i64);
         let mut file = OpenOptions::new().write(true).open(CONFIG_FILENAME)?;
         file.write_all(config.to_string().as_bytes())?;
+        debug!("Successful: Plant {} get {}ml/day now", index, amount_ml);
         Ok(())
     }
 
@@ -101,5 +104,9 @@ impl ConfigManager {
         let mut file = OpenOptions::new().write(true).open(CONFIG_FILENAME)?;
         file.write_all(config.to_string().as_bytes())?;
         Ok(())
+    }
+
+    pub fn get_api_secret(&self) -> Result<String, ConfigError> {
+        self.get().map(|c| c.api_secret)
     }
 }
