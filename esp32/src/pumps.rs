@@ -1,7 +1,7 @@
-use std::{time::Duration, thread::sleep};
+use std::{thread::sleep, time::Duration};
 
 use esp_idf_hal::{
-    gpio::{AnyOutputPin, OutputPin},
+    gpio::{AnyOutputPin, PinDriver},
     ledc::{LedcDriver, LedcTimerDriver, CHANNEL0, TIMER0},
     peripheral::PeripheralRef,
     units::KiloHertz,
@@ -14,12 +14,26 @@ pub struct Pumps<'a> {
     pumps: Vec<PeripheralRef<'a, AnyOutputPin>>,
 }
 
+impl Drop for Pumps<'_> {
+    fn drop(&mut self) {
+        for p in self.pumps.iter_mut() {
+            let mut p = PinDriver::output(p.reborrow()).unwrap();
+            p.set_low().unwrap();
+        }
+    }
+}
+
 impl<'a> Pumps<'a> {
     pub fn new(
         timer0: PeripheralRef<'a, TIMER0>,
         channel0: PeripheralRef<'a, CHANNEL0>,
-        pumps: Vec<PeripheralRef<'a, AnyOutputPin>>,
+        mut pumps: Vec<PeripheralRef<'a, AnyOutputPin>>,
     ) -> Self {
+        // Esnure pins are low
+        for p in pumps.iter_mut() {
+            let mut p = PinDriver::output(p.reborrow()).unwrap();
+            p.set_low().unwrap();
+        }
         Self {
             timer0,
             channel0,
@@ -28,16 +42,15 @@ impl<'a> Pumps<'a> {
     }
 
     pub fn pump(&mut self, index: usize, duration: Duration) -> Option<()> {
-        let pump = self
-            .pumps
-            .get_mut(index)?;
+        let pump = self.pumps.get_mut(index)?;
 
         let timer_driver = LedcTimerDriver::new(
             self.timer0.reborrow(),
             &esp_idf_hal::ledc::config::TimerConfig::default().frequency(KiloHertz(10_u32).into()),
         )
         .unwrap();
-        let mut driver = LedcDriver::new(self.channel0.reborrow(), timer_driver, pump.reborrow()).unwrap();
+        let mut driver =
+            LedcDriver::new(self.channel0.reborrow(), timer_driver, pump.reborrow()).unwrap();
         let max_duty = driver.get_max_duty();
 
         // Slowly start pump within 100ms

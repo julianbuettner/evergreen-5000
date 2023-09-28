@@ -1,7 +1,6 @@
 use std::time::Duration;
 
 use embedded_svc::http::client::*;
-use embedded_svc::io::{Read, Write};
 use embedded_svc::utils::io;
 use esp_idf_svc::http::client::*;
 use serde::Deserialize;

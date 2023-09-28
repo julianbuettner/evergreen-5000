@@ -1,5 +1,5 @@
 use esp_idf_hal::{
-    gpio::{AnyOutputPin, Output, OutputPin, PinDriver},
+    gpio::{AnyOutputPin, Output, PinDriver},
     peripheral::PeripheralRef,
 };
 
@@ -47,6 +47,7 @@ impl<'a> StatusSignaler<'a> {
         let mut green_driver: Vec<PinDriver<AnyOutputPin, Output>> = green.into_iter()
             .map(|p| PinDriver::output(p).unwrap())
             .collect();
+        // Ensure pins are low
         for g in green_driver.iter_mut() {
             g.set_low().unwrap();
         }

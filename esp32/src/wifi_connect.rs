@@ -1,17 +1,22 @@
-use std::{time::{Duration, Instant}, thread::sleep, net::Ipv4Addr};
+use std::{
+    net::Ipv4Addr,
+    thread::sleep,
+    time::{Duration, Instant},
+};
 
-
-use esp_idf_hal::{modem::{Modem}};
-use esp_idf_svc::{eventloop::{EspEventLoop, System}, nvs::{EspNvsPartition, NvsDefault}, wifi::{EspWifi}};
-use embedded_svc::wifi::{ClientConfiguration as WifiClientConfiguration, Configuration, Wifi};
-
-
+use embedded_svc::wifi::{ClientConfiguration as WifiClientConfiguration, Configuration};
+use esp_idf_hal::modem::Modem;
+use esp_idf_svc::{
+    eventloop::{EspEventLoop, System},
+    nvs::{EspNvsPartition, NvsDefault},
+    wifi::EspWifi,
+};
 
 #[derive(Clone, Debug)]
 pub enum WifiErr {
     TimeoutConnect,
     TimeoutIp,
-    WrongCredentials,
+    //WrongCredentials,
 }
 
 pub struct WifiConnection<'a> {
@@ -32,7 +37,7 @@ pub fn connect_to_wifi_with_timeout(
     modem: Modem,
     sys_loop: EspEventLoop<System>,
     nvs: EspNvsPartition<NvsDefault>,
-    ) -> Result<WifiConnection<'static>, WifiErr> {
+) -> Result<WifiConnection<'static>, WifiErr> {
     let mut wifi_driver = EspWifi::new(modem, sys_loop, Some(nvs)).unwrap();
     wifi_driver
         .set_configuration(&Configuration::Client(WifiClientConfiguration {

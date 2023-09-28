@@ -1,19 +1,18 @@
 use enumset::enum_set;
 use esp_idf_hal::{
     cpu::Core, gpio::AnyOutputPin, peripheral::Peripheral, task::watchdog::TWDTConfig,
-    units::KiloHertz,
 };
 use esp_idf_sys as _; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
 
-use esp_idf_hal::{
-    ledc::{LedcDriver, LedcTimerDriver},
-    peripherals::Peripherals,
+use esp_idf_hal::peripherals::Peripherals;
+use esp_idf_svc::{
+    eventloop::{EspEventLoop, EspSystemEventLoop, System},
+    nvs::{EspDefaultNvsPartition, EspNvsPartition, NvsDefault},
 };
-use esp_idf_svc::{eventloop::EspSystemEventLoop, nvs::EspDefaultNvsPartition};
 use std::{thread::sleep, time::Duration};
 
 use crate::{
-    deepsleep::deep_sleep, pumps::Pumps, query::fetch_jobs, status_signaler::StatusSignaler,
+    pumps::Pumps, query::fetch_jobs, status_signaler::StatusSignaler,
     wifi_connect::connect_to_wifi_with_timeout,
 };
 
@@ -23,17 +22,19 @@ mod query;
 mod status_signaler;
 mod wifi_connect;
 
-fn main() {
-    // It is necessary to call this function once. Otherwise some patches to the runtime
-    // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
-    esp_idf_sys::link_patches();
-    // Bind the log crate to the ESP Logging facilities
-    esp_idf_svc::log::EspLogger::initialize_default();
+// Binary on three LEDs
+const SIGNAL_WHILE_WIFI: u8 = 1;
+const SIGNAL_WHILE_FETCH: u8 = 2;
+const SIGNAL_WHILE_WATERING: u8 = 4;
 
-    let peripherals = Peripherals::take().unwrap();
-    let sys_loop = EspSystemEventLoop::take().unwrap();
-    let nvs = EspDefaultNvsPartition::take().unwrap();
-
+// When returning routine, the destructors
+// of pumps and led signal should set every
+// pin to low.
+fn routine(
+    peripherals: Peripherals,
+    sys_loop: EspEventLoop<System>,
+    nvs: EspNvsPartition<NvsDefault>,
+) -> Duration {
     // WATCHDOG
     // So, the code restarted automatically after a few seconds
     // because of some watchdog thing. I could not `feed` it,
@@ -49,7 +50,7 @@ fn main() {
     let _watchdog = driver.watch_current_task().unwrap();
 
     // Init LED status indicator
-    println!("Init LED Signaler");
+    println!("Init LED Signaler and pumps");
     let pins = peripherals.pins;
     let mut led_signaler = StatusSignaler::new(
         AnyOutputPin::from(pins.gpio13).into_ref(),
@@ -68,7 +69,7 @@ fn main() {
         ],
     );
 
-    led_signaler.set_green_numer(1);
+    led_signaler.set_green_numer(SIGNAL_WHILE_WIFI);
     let jobs = {
         println!("Connect to Wifi");
         let wifi_res =
@@ -77,11 +78,10 @@ fn main() {
             led_signaler.error_led_on();
             println!("Could not connect to wifi!");
             sleep(Duration::from_secs(10));
-            deep_sleep(Duration::from_secs(3600));
+            return Duration::from_secs(3600);
         }
         let _wifi_driver = wifi_res.unwrap();
-
-        led_signaler.set_green_numer(2);
+        led_signaler.set_green_numer(SIGNAL_WHILE_FETCH);
         println!("Fetching ESP todos...");
         fetch_jobs(100.) // drop and disconnect wifi
     };
@@ -89,12 +89,10 @@ fn main() {
         println!("Error fetching jobs: {:?}", e);
         led_signaler.error_led_on();
         sleep(Duration::from_secs(10));
-        drop(led_signaler);
-        deep_sleep(Duration::from_secs(900));
+        return Duration::from_secs(3600);
     }
     let jobs = jobs.unwrap();
-
-    led_signaler.set_green_numer(3);
+    led_signaler.set_green_numer(SIGNAL_WHILE_WATERING);
     for (index, duration) in jobs.plantings.iter().enumerate() {
         if duration.is_zero() {
             continue;
@@ -104,10 +102,26 @@ fn main() {
             None => println!("Warning. No pump connected to {}", index),
         }
     }
+    // Call destructor to zero all pins, just to be sure
+    drop(pumps);
 
-    println!("Going deep sleep");
     led_signaler.set_full_green();
-    sleep(Duration::from_secs(1));
-    // wifi_driver.disconnect().unwrap();
-    deepsleep::deep_sleep(jobs.sleep_recommendation);
+    sleep(Duration::from_secs(2));
+    jobs.sleep_recommendation
+}
+
+fn main() {
+    // It is necessary to call this function once. Otherwise some patches to the runtime
+    // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
+    esp_idf_sys::link_patches();
+    // Bind the log crate to the ESP Logging facilities
+    esp_idf_svc::log::EspLogger::initialize_default();
+
+    let peripherals = Peripherals::take().unwrap();
+    let sys_loop = EspSystemEventLoop::take().unwrap();
+    let nvs = EspDefaultNvsPartition::take().unwrap();
+
+    let deepsleep_duration = routine(peripherals, sys_loop, nvs);
+
+    deepsleep::deep_sleep(deepsleep_duration);
 }
