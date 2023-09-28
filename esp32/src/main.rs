@@ -93,13 +93,13 @@ fn routine(
     }
     let jobs = jobs.unwrap();
     led_signaler.set_green_numer(SIGNAL_WHILE_WATERING);
-    for (index, duration) in jobs.plantings.iter().enumerate() {
-        if duration.is_zero() {
+    for job in jobs.watering_jobs.iter() {
+        if job.amount_ml == 0 {
             continue;
         }
-        match pumps.pump(index, duration.clone()) {
+        match pumps.pump(job.plant_index, job.amount_ml as u32) {
             Some(_) => (),
-            None => println!("Warning. No pump connected to {}", index),
+            None => println!("Warning. No pump connected to {}", job.plant_index),
         }
     }
     // Call destructor to zero all pins, just to be sure
@@ -107,7 +107,7 @@ fn routine(
 
     led_signaler.set_full_green();
     sleep(Duration::from_secs(2));
-    jobs.sleep_recommendation
+    Duration::from_secs(jobs.sleep_recommendation_seconds)
 }
 
 fn main() {

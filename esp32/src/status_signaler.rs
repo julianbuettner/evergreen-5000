@@ -44,14 +44,18 @@ impl<'a> StatusSignaler<'a> {
     ) -> StatusSignaler<'a> {
         let mut red_driver = PinDriver::output(red).unwrap();
         red_driver.set_low().unwrap();
-        let mut green_driver: Vec<PinDriver<AnyOutputPin, Output>> = green.into_iter()
+        let mut green_driver: Vec<PinDriver<AnyOutputPin, Output>> = green
+            .into_iter()
             .map(|p| PinDriver::output(p).unwrap())
             .collect();
         // Ensure pins are low
         for g in green_driver.iter_mut() {
             g.set_low().unwrap();
         }
-        Self { red_driver, green_driver }
+        Self {
+            red_driver,
+            green_driver,
+        }
     }
 
     pub fn error_led_on(&mut self) {

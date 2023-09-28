@@ -41,7 +41,7 @@ impl<'a> Pumps<'a> {
         }
     }
 
-    pub fn pump(&mut self, index: usize, duration: Duration) -> Option<()> {
+    pub fn pump(&mut self, index: usize, amount_ml: u32) -> Option<()> {
         let pump = self.pumps.get_mut(index)?;
 
         let timer_driver = LedcTimerDriver::new(
@@ -61,7 +61,7 @@ impl<'a> Pumps<'a> {
         }
         println!("Max pump now");
         driver.set_duty(max_duty).unwrap();
-        sleep(duration);
+        sleep(amount_ml * Duration::from_millis(5));
         println!("Slowly stop pump again");
         // Slowly stop again
         for ms in 0..1000 {
