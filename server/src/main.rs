@@ -2,7 +2,7 @@ use std::net::SocketAddr;
 
 use api_frontend::last_seen;
 use axum::{
-    http::StatusCode,
+    http::{StatusCode, Uri},
     routing::{get, post},
     Router,
 };
@@ -32,8 +32,8 @@ pub struct GlobalState {
     pub pending_warting_test: PendingWateringTest,
 }
 
-async fn handler_404() -> (StatusCode, &'static str) {
-    info!("Got request with no matched endpoint: 404");
+async fn handler_404(uri: Uri) -> (StatusCode, &'static str) {
+    info!("Got request with no matched endpoint: 404 - {}", uri);
     (StatusCode::NOT_FOUND, "Path, query or body mismatch.")
 }
 
