@@ -25,6 +25,9 @@
                 if (requestRes.status == 410) {
                         return 410;
                 }
+                if (requestRes.status == 403) {
+                        return 403;
+                }
                 const body = await requestRes.text();
                 console.log("Result of watering test: " + body);
                 return body;
@@ -78,6 +81,11 @@
                  <p class="info-text">
                         Another watering test has been started,
                         so this one has been canceled.
+                 </p>
+                 {:else if doneWatering == 403}
+                 <p class="info-text">
+                        You have to be in the same WLAN
+                        as the evergreen 5000 to start watering tests.
                  </p>
                  {:else}
                  <p class="info-text">
