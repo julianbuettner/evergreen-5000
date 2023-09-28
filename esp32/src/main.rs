@@ -1,3 +1,4 @@
+#![feature(exclusive_range_pattern)]
 use enumset::enum_set;
 use esp_idf_hal::{
     cpu::Core, gpio::AnyOutputPin, peripheral::Peripheral, task::watchdog::TWDTConfig,
@@ -12,10 +13,11 @@ use esp_idf_svc::{
 use std::{thread::sleep, time::Duration};
 
 use crate::{
-    pumps::Pumps, query::fetch_jobs, status_signaler::StatusSignaler,
+    accu::{measure_accu, single_nimh_cell_volt_to_percent}, pumps::Pumps, query::fetch_jobs, status_signaler::StatusSignaler,
     wifi_connect::connect_to_wifi_with_timeout,
 };
 
+mod accu;
 mod deepsleep;
 mod pumps;
 mod query;
@@ -26,6 +28,9 @@ mod wifi_connect;
 const SIGNAL_WHILE_WIFI: u8 = 1;
 const SIGNAL_WHILE_FETCH: u8 = 2;
 const SIGNAL_WHILE_WATERING: u8 = 4;
+
+const NIMH_CELLS_IN_ROW: usize = 8;
+const ACCU_VOLTAGE_DIVIDER: f32 = 330. / 1330.;
 
 // When returning routine, the destructors
 // of pumps and led signal should set every
@@ -50,7 +55,7 @@ fn routine(
     let _watchdog = driver.watch_current_task().unwrap();
 
     // Init LED status indicator
-    println!("Init LED Signaler and pumps");
+    println!("Init LED Signaler");
     let pins = peripherals.pins;
     let mut led_signaler = StatusSignaler::new(
         AnyOutputPin::from(pins.gpio13).into_ref(),
@@ -60,6 +65,7 @@ fn routine(
             AnyOutputPin::from(pins.gpio27).into_ref(),
         ],
     );
+    println!("Init Pumps");
     let mut pumps = Pumps::new(
         peripherals.ledc.timer0.into_ref(),
         peripherals.ledc.channel0.into_ref(),
@@ -68,6 +74,14 @@ fn routine(
             AnyOutputPin::from(pins.gpio23).into_ref(),
         ],
     );
+    println!("Init Accu measure");
+    let accu_volt = measure_accu(
+        peripherals.adc2.into_ref(),
+        AnyOutputPin::from(pins.gpio32).into_ref(),
+        pins.gpio4.into_ref(),
+        ACCU_VOLTAGE_DIVIDER,
+    );
+    let accu_percent = single_nimh_cell_volt_to_percent(accu_volt / NIMH_CELLS_IN_ROW as f32);
 
     led_signaler.set_green_numer(SIGNAL_WHILE_WIFI);
     let jobs = {
@@ -83,7 +97,7 @@ fn routine(
         let _wifi_driver = wifi_res.unwrap();
         led_signaler.set_green_numer(SIGNAL_WHILE_FETCH);
         println!("Fetching ESP todos...");
-        fetch_jobs(100.) // drop and disconnect wifi
+        fetch_jobs(accu_percent) // drop and disconnect wifi
     };
     if let Err(e) = jobs {
         println!("Error fetching jobs: {:?}", e);
