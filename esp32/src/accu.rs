@@ -3,8 +3,9 @@ use std::time::Duration;
 
 use esp_idf_hal::adc::*;
 
+use esp_idf_hal::gpio::AnyIOPin;
 use esp_idf_hal::{
-    adc::{config::Config, AdcChannelDriver, AdcDriver, ADC2},
+    adc::{config::Config, AdcChannelDriver, AdcDriver, ADC1},
     gpio::{ADCPin, AnyOutputPin, PinDriver},
     peripheral::PeripheralRef,
 };
@@ -44,14 +45,10 @@ pub fn single_nimh_cell_volt_to_percent(volt: f32) -> f32 {
 }
 
 pub fn measure_accu<'a, A: ADCPin>(
-    adc2: PeripheralRef<'a, ADC2>,
+    adc2: PeripheralRef<'a, ADC1>,
     controller_pin: PeripheralRef<'a, AnyOutputPin>,
     voltage_pin: PeripheralRef<'a, A>,
-    factor: f32, // voltage divider, e.g. 330/1330
 ) -> f32 {
-    if factor > 1.0 {
-        println!("Warning! Voltage divider value must be 1.0 or less.");
-    }
     let mut adc = AdcDriver::new(adc2, &Config::new().calibration(true)).unwrap();
     let mut adc_pin: esp_idf_hal::adc::AdcChannelDriver<A, Atten11dB<_>> =
         AdcChannelDriver::new(voltage_pin).unwrap();
@@ -59,18 +56,25 @@ pub fn measure_accu<'a, A: ADCPin>(
     // activate measuring:
     let mut controller = PinDriver::output(controller_pin).unwrap();
     controller.set_high().unwrap();
-    sleep(Duration::from_millis(5));
+    println!("Measure accu in 10s");
+    sleep(Duration::from_secs(5));
 
-    //  loop {
-    //     std::thread::sleep(Duration::from_millis(250));
-    //     println!("ADC value: {}", adc.read(&mut adc_pin).unwrap());
-    //  }
-    let raw_value = adc.read(&mut adc_pin).unwrap();
+    const SAMPLE_SIZE: usize = 10;
+    let mut samples: [u16; SAMPLE_SIZE] = [0; SAMPLE_SIZE];
+    for i in 0..SAMPLE_SIZE {
+        samples[i] = adc.read(&mut adc_pin).unwrap();
+        sleep(Duration::from_millis(50));
+    }
+    let raw_value: f64 = samples.iter().map(|v| *v as f64).sum::<f64>() / SAMPLE_SIZE as f64;
+
+    println!("Raw value: {}", raw_value);
     controller.set_low().unwrap();
 
     let volt_measured = 3.3 * raw_value as f32 / (HIGH_VOLT - LOW_VOLT) as f32;
+    println!("Measured Accu Voltage: {}", volt_measured);
+    sleep(Duration::from_secs(5));
 
-    volt_measured / factor
+    volt_measured
 }
 
 #[cfg(test)]
