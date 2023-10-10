@@ -52,7 +52,11 @@ impl JsonStateManager {
             .write(true)
             .open(STATE_FILENAME)?;
         let buf = serde_json::to_string(&state)?;
+        file.set_len(0)?;
         file.write(buf.as_bytes())?;
+        file.sync_all()?;
+        drop(file);
+        drop(_guard);
         Ok(())
     }
 
