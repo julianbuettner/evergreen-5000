@@ -1,10 +1,7 @@
 #![feature(exclusive_range_pattern)]
 use enumset::enum_set;
 use esp_idf_hal::{
-    cpu::Core,
-    gpio::{ADCPin, AnyIOPin, AnyInputPin, AnyOutputPin, PinDriver},
-    peripheral::{Peripheral, PeripheralRef},
-    task::watchdog::TWDTConfig,
+    cpu::Core, gpio::AnyOutputPin, peripheral::Peripheral, task::watchdog::TWDTConfig,
 };
 use esp_idf_sys::{self as _};
 
@@ -17,7 +14,7 @@ use std::{thread::sleep, time::Duration};
 
 use crate::{
     accu::{single_nimh_cell_volt_to_percent, Accu},
-    pumps::{Pumps, PumpError},
+    pumps::{PumpError, Pumps},
     query::fetch_jobs,
     status_signaler::StatusSignaler,
     wifi_connect::connect_to_wifi_with_timeout,
@@ -143,8 +140,8 @@ fn routine(
                 led_signaler.error_led_on();
                 sleep(ERROR_SLEEP_DURATION);
                 return ERROR_SLEEP_DURATION;
-            },
-            Some(Ok(())) => {},
+            }
+            Some(Ok(())) => {}
             None => println!("Warning. No pump connected to {}", job.plant_index),
         }
     }

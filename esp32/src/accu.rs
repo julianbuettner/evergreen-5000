@@ -3,10 +3,9 @@ use std::time::Duration;
 
 use esp_idf_hal::adc::*;
 
-use esp_idf_hal::gpio::AnyIOPin;
 use esp_idf_hal::{
     adc::{config::Config, AdcChannelDriver, AdcDriver, ADC1},
-    gpio::{ADCPin, AnyOutputPin, PinDriver},
+    gpio::ADCPin,
     peripheral::PeripheralRef,
 };
 

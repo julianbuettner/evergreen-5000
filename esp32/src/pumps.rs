@@ -94,7 +94,7 @@ impl<'a, A: ADCPin> Pumps<'a, A> {
             }
             let delta_watered = PUMP_ML_PER_VOLT_SECOND * volt * delta.elapsed().as_secs_f32();
             ml_watered += delta_watered;
-            let delta = Instant::now();
+            let _delta = Instant::now();
         }
         println!("Watered {}ml", ml_watered);
 
