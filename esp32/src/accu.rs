@@ -10,8 +10,8 @@ use esp_idf_hal::{
     peripheral::PeripheralRef,
 };
 
-const LOW_VOLT: u32 = 128; // pin grounded
-const HIGH_VOLT: u32 = 3116; // pin connected to 3.3
+const LOW_VOLT: u32 = 142; // pin grounded
+const HIGH_VOLT: u32 = 3129; // pin connected to 3.3
 
 pub fn single_nimh_cell_volt_to_percent(volt: f32) -> f32 {
     let curve = [
@@ -44,37 +44,47 @@ pub fn single_nimh_cell_volt_to_percent(volt: f32) -> f32 {
     panic!("Should never be reached.");
 }
 
-pub fn measure_accu<'a, A: ADCPin>(
+pub struct Accu<'a, A: ADCPin> {
     adc2: PeripheralRef<'a, ADC1>,
-    controller_pin: PeripheralRef<'a, AnyOutputPin>,
     voltage_pin: PeripheralRef<'a, A>,
-) -> f32 {
-    let mut adc = AdcDriver::new(adc2, &Config::new().calibration(true)).unwrap();
-    let mut adc_pin: esp_idf_hal::adc::AdcChannelDriver<A, Atten11dB<_>> =
-        AdcChannelDriver::new(voltage_pin).unwrap();
+    factor: f32,
+    min_volt: f32,
+}
 
-    // activate measuring:
-    let mut controller = PinDriver::output(controller_pin).unwrap();
-    controller.set_high().unwrap();
-    println!("Measure accu in 10s");
-    sleep(Duration::from_secs(5));
-
-    const SAMPLE_SIZE: usize = 10;
-    let mut samples: [u16; SAMPLE_SIZE] = [0; SAMPLE_SIZE];
-    for i in 0..SAMPLE_SIZE {
-        samples[i] = adc.read(&mut adc_pin).unwrap();
-        sleep(Duration::from_millis(50));
+impl<'a, A: ADCPin> Accu<'a, A> {
+    pub fn new(
+        adc2: PeripheralRef<'a, ADC1>,
+        voltage_pin: PeripheralRef<'a, A>,
+        factor: f32,
+        min_volt: f32,
+    ) -> Self {
+        Self {
+            adc2,
+            voltage_pin,
+            factor,
+            min_volt,
+        }
     }
-    let raw_value: f64 = samples.iter().map(|v| *v as f64).sum::<f64>() / SAMPLE_SIZE as f64;
+    pub fn measure_volt(&mut self) -> f32 {
+        let mut adc =
+            AdcDriver::new(self.adc2.reborrow(), &Config::new().calibration(true)).unwrap();
+        let mut adc_pin: esp_idf_hal::adc::AdcChannelDriver<A, Atten11dB<_>> =
+            AdcChannelDriver::new(self.voltage_pin.reborrow()).unwrap();
 
-    println!("Raw value: {}", raw_value);
-    controller.set_low().unwrap();
+        const SAMPLE_SIZE: usize = 30;
+        let mut samples: [u16; SAMPLE_SIZE] = [0; SAMPLE_SIZE];
+        for i in 0..SAMPLE_SIZE {
+            samples[i] = adc.read(&mut adc_pin).unwrap();
+            sleep(Duration::from_micros(250)); // 0.25m
+        }
+        let raw_value: f32 = samples.iter().map(|v| *v as f32).sum::<f32>() / SAMPLE_SIZE as f32;
 
-    let volt_measured = 3.3 * raw_value as f32 / (HIGH_VOLT - LOW_VOLT) as f32;
-    println!("Measured Accu Voltage: {}", volt_measured);
-    sleep(Duration::from_secs(5));
-
-    volt_measured
+        println!("Raw value: {}", raw_value);
+        let volt_measured = 3.3 * (raw_value - LOW_VOLT as f32) / (HIGH_VOLT) as f32;
+        println!("Measured Accu Voltage: {}", volt_measured);
+        println!("Scaled Accu Voltage: {}", volt_measured * self.factor);
+        volt_measured * self.factor
+    }
 }
 
 #[cfg(test)]

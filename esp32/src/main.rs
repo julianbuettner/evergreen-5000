@@ -2,11 +2,11 @@
 use enumset::enum_set;
 use esp_idf_hal::{
     cpu::Core,
-    gpio::{AnyIOPin, AnyOutputPin, PinDriver},
+    gpio::{ADCPin, AnyIOPin, AnyInputPin, AnyOutputPin, PinDriver},
     peripheral::{Peripheral, PeripheralRef},
     task::watchdog::TWDTConfig,
 };
-use esp_idf_sys::{self as _, gpio_num_t_GPIO_NUM_32}; // If using the `binstart` feature of `esp-idf-sys`, always keep this module imported
+use esp_idf_sys::{self as _};
 
 use esp_idf_hal::peripherals::Peripherals;
 use esp_idf_svc::{
@@ -16,8 +16,8 @@ use esp_idf_svc::{
 use std::{thread::sleep, time::Duration};
 
 use crate::{
-    accu::{measure_accu, single_nimh_cell_volt_to_percent},
-    pumps::Pumps,
+    accu::{single_nimh_cell_volt_to_percent, Accu},
+    pumps::{Pumps, PumpError},
     query::fetch_jobs,
     status_signaler::StatusSignaler,
     wifi_connect::connect_to_wifi_with_timeout,
@@ -34,9 +34,25 @@ mod wifi_connect;
 const SIGNAL_WHILE_WIFI: u8 = 1;
 const SIGNAL_WHILE_FETCH: u8 = 2;
 const SIGNAL_WHILE_WATERING: u8 = 4;
+const ERROR_SLEEP_DURATION: Duration = Duration::from_secs(7200);
+const ERROR_SHOW_RED_LED_DURATION: Duration = Duration::from_secs(15);
 
-const NIMH_CELLS_IN_ROW: usize = 8;
-const ACCU_VOLTAGE_FACTOR: f32 = 1330. / 330.;
+const ACCU_NIMH_CELLS_IN_ROW: usize = 8;
+const ACCU_VOLTAGE_R1: f32 = 98.3; // kOhm
+const ACCU_VOLTAGE_R2: f32 = 32.6; // kOhm
+const ACCU_VOLTAGE_FACTOR: f32 = (ACCU_VOLTAGE_R1 + ACCU_VOLTAGE_R2) / ACCU_VOLTAGE_R2;
+const ACCU_CIRITICAL_VOLTAGE: f32 = 5.0; // stop watering below critical volt (under load)
+
+// measure how much the pump outputs continously
+// over 10s. Measure the result and divide by 10s.
+// Measure the voltage of the battery while pumping.
+// Divide previously value by volt.
+// I measured 1300ml / 10s / 5.8V
+pub const PUMP_ML_PER_VOLT_SECOND: f32 = 22.413793;
+pub const PUMP_WARMUP_MS: u32 = 25; // no abrupt start
+pub const PUMP_COOLDOWN_MS: u32 = 25; // no abrupt stop
+                                      // Hard coded maximum, which will never by exceeded
+pub const PUMP_MAX_PUMP_DURATION: Duration = Duration::from_secs(15);
 
 // When returning routine, the destructors
 // of pumps and led signal should set every
@@ -45,7 +61,7 @@ fn routine(
     peripherals: Peripherals,
     sys_loop: EspEventLoop<System>,
     nvs: EspNvsPartition<NvsDefault>,
-) -> (Duration, Vec<AnyOutputPin>) {
+) -> Duration {
     // WATCHDOG
     // So, the code restarted automatically after a few seconds
     // because of some watchdog thing. I could not `feed` it,
@@ -65,9 +81,8 @@ fn routine(
     let green1 = AnyOutputPin::from(pins.gpio12);
     let green2 = AnyOutputPin::from(pins.gpio14);
     let green3 = AnyOutputPin::from(pins.gpio27);
-    let pump1 = AnyOutputPin::from(pins.gpio22);
-    let pump2 = AnyOutputPin::from(pins.gpio23);
-    let accu_measure_controller = AnyOutputPin::from(pins.gpio32);
+    let pump1 = AnyOutputPin::from(pins.gpio25);
+    let pump2 = AnyOutputPin::from(pins.gpio33);
 
     // Init LED status indicator
     println!("Init LED Signaler");
@@ -75,21 +90,24 @@ fn routine(
         red.into_ref(),
         vec![green1.into_ref(), green2.into_ref(), green3.into_ref()],
     );
+    println!("Init Accu measure");
+    let mut accu = Accu::new(
+        peripherals.adc1.into_ref(),
+        pins.gpio35.into_ref(),
+        ACCU_VOLTAGE_FACTOR,
+        ACCU_CIRITICAL_VOLTAGE,
+    );
+    let accu_volt = accu.measure_volt();
+    println!("Accu est: {}V", accu_volt);
+    let accu_percent = single_nimh_cell_volt_to_percent(accu_volt / ACCU_NIMH_CELLS_IN_ROW as f32);
+    println!("Accu percent measures / calculated: {}%", accu_percent);
     println!("Init Pumps");
     let mut pumps = Pumps::new(
         peripherals.ledc.timer0.into_ref(),
         peripherals.ledc.channel0.into_ref(),
         vec![pump1.into_ref(), pump2.into_ref()],
+        accu,
     );
-    println!("Init Accu measure");
-    let accu_volt = measure_accu(
-        peripherals.adc1.into_ref(),
-        accu_measure_controller.into_ref(),
-        pins.gpio35.into_ref(),
-    ) * ACCU_VOLTAGE_FACTOR;
-    let accu_percent = single_nimh_cell_volt_to_percent(accu_volt / NIMH_CELLS_IN_ROW as f32);
-    println!("Accu percent measures / calculated: {}%", accu_percent);
-    return (Duration::from_secs(5), vec![accu_measure_controller]);
 
     led_signaler.set_green_numer(SIGNAL_WHILE_WIFI);
     let jobs = {
@@ -99,8 +117,8 @@ fn routine(
         if wifi_res.is_err() {
             led_signaler.error_led_on();
             println!("Could not connect to wifi!");
-            sleep(Duration::from_secs(10));
-            return (Duration::from_secs(3600), vec![accu_measure_controller]);
+            sleep(ERROR_SHOW_RED_LED_DURATION);
+            return ERROR_SLEEP_DURATION;
         }
         let _wifi_driver = wifi_res.unwrap();
         led_signaler.set_green_numer(SIGNAL_WHILE_FETCH);
@@ -110,8 +128,8 @@ fn routine(
     if let Err(e) = jobs {
         println!("Error fetching jobs: {:?}", e);
         led_signaler.error_led_on();
-        sleep(Duration::from_secs(10));
-        return (Duration::from_secs(3600), vec![accu_measure_controller]);
+        sleep(ERROR_SHOW_RED_LED_DURATION);
+        return ERROR_SLEEP_DURATION;
     }
     let jobs = jobs.unwrap();
     led_signaler.set_green_numer(SIGNAL_WHILE_WATERING);
@@ -120,7 +138,13 @@ fn routine(
             continue;
         }
         match pumps.pump(job.plant_index, job.amount_ml as u32) {
-            Some(_) => (),
+            Some(Err(PumpError::AccuCriticalVoltage)) => {
+                println!("Warning! Accu below critical voltage.");
+                led_signaler.error_led_on();
+                sleep(ERROR_SLEEP_DURATION);
+                return ERROR_SLEEP_DURATION;
+            },
+            Some(Ok(())) => {},
             None => println!("Warning. No pump connected to {}", job.plant_index),
         }
     }
@@ -129,10 +153,7 @@ fn routine(
 
     led_signaler.set_full_green();
     sleep(Duration::from_secs(7));
-    (
-        Duration::from_secs(jobs.sleep_recommendation_seconds),
-        vec![accu_measure_controller],
-    )
+    Duration::from_secs(jobs.sleep_recommendation_seconds)
 }
 
 fn main() {
@@ -146,21 +167,9 @@ fn main() {
     let sys_loop = EspSystemEventLoop::take().unwrap();
     let nvs = EspDefaultNvsPartition::take().unwrap();
 
-    let (deepsleep_duration, low_pins) = routine(peripherals, sys_loop, nvs);
+    let deepsleep_duration = routine(peripherals, sys_loop, nvs);
 
     println!("Sleep now for {:?}", deepsleep_duration);
 
-    let mut drivers = Vec::new();
-    for pin in low_pins {
-        let mut d = PinDriver::output(pin).unwrap();
-        d.set_low().unwrap();
-        drivers.push(d);
-    }
-    unsafe {
-        esp_idf_sys::gpio_hold_en(gpio_num_t_GPIO_NUM_32);
-        esp_idf_sys::gpio_deep_sleep_hold_en();
-    }
-
     deepsleep::deep_sleep(deepsleep_duration);
-    drop(drivers)
 }
