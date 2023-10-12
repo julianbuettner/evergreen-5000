@@ -51,7 +51,7 @@
          <div style="display: flex; justify-content: center; align-items: center; padding: 4px; color: white">
          <select name="fml2" id="selectAmountMl" bind:value={amountMl} on:change={updateAmount}>
                 <option value="{amountMl}" selected>{amountMl}ml / day</option>
-                {#each [0, 10, 25, 50, 100, 250, 500] as amountMlOption }
+                {#each [0, 200, 300, 400, 500, 600, 700, 800, 900] as amountMlOption }
                 <option value="{amountMlOption}">{amountMlOption}ml / day</option>
                 {/each}
          </select>
