@@ -84,7 +84,7 @@ impl<'a, A: ADCPin> Pumps<'a, A> {
         println!("Max pump now");
         driver.set_duty(max_duty).unwrap();
         let start = Instant::now();
-        let delta = Instant::now();
+        let mut delta = Instant::now();
         while start.elapsed() < PUMP_MAX_PUMP_DURATION && (ml_watered as u32) < amount_ml {
             sleep(Duration::from_millis(5));
             let volt = self.accu.measure_volt();
@@ -94,9 +94,8 @@ impl<'a, A: ADCPin> Pumps<'a, A> {
             }
             let delta_watered = PUMP_ML_PER_VOLT_SECOND * volt * delta.elapsed().as_secs_f32();
             ml_watered += delta_watered;
-            let _delta = Instant::now();
+            delta = Instant::now();
         }
-        println!("Watered {}ml", ml_watered);
 
         println!("Slowly stop pump again");
         // Slowly stop again
@@ -106,7 +105,7 @@ impl<'a, A: ADCPin> Pumps<'a, A> {
                 .unwrap();
             sleep(Duration::from_millis(1));
         }
-        println!("Done pumping!");
+        println!("Done pumping: wateres {}ml in {}ms", ml_watered, start.elapsed().as_millis());
         Some(Ok(()))
     }
 }

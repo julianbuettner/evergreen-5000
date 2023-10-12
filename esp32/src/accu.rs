@@ -78,10 +78,13 @@ impl<'a, A: ADCPin> Accu<'a, A> {
         }
         let raw_value: f32 = samples.iter().map(|v| *v as f32).sum::<f32>() / SAMPLE_SIZE as f32;
 
-        println!("Raw value: {}", raw_value);
         let volt_measured = 3.3 * (raw_value - LOW_VOLT as f32) / (HIGH_VOLT) as f32;
-        println!("Measured Accu Voltage: {}", volt_measured);
-        println!("Scaled Accu Voltage: {}", volt_measured * self.factor);
+        println!(
+            "Acuc measurement result: {}V total, {}V at pin, {} at pin raw",
+            volt_measured * self.factor,
+            volt_measured,
+            raw_value
+        );
         volt_measured * self.factor
     }
 }
