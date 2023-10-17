@@ -74,12 +74,13 @@ fn routine(
     let _watchdog = driver.watch_current_task().unwrap();
 
     let pins = peripherals.pins;
-    let red = AnyOutputPin::from(pins.gpio13);
-    let green1 = AnyOutputPin::from(pins.gpio12);
-    let green2 = AnyOutputPin::from(pins.gpio14);
-    let green3 = AnyOutputPin::from(pins.gpio27);
+    let red = AnyOutputPin::from(pins.gpio12);
+    let green1 = AnyOutputPin::from(pins.gpio14);
+    let green2 = AnyOutputPin::from(pins.gpio27);
+    let green3 = AnyOutputPin::from(pins.gpio26);
     let pump1 = AnyOutputPin::from(pins.gpio25);
-    let pump2 = AnyOutputPin::from(pins.gpio33);
+    let pump2 = AnyOutputPin::from(pins.gpio32);
+    let accu_measure = pins.gpio35.into_ref();
 
     // Init LED status indicator
     println!("Init LED Signaler");
@@ -90,7 +91,7 @@ fn routine(
     println!("Init Accu measure");
     let mut accu = Accu::new(
         peripherals.adc1.into_ref(),
-        pins.gpio35.into_ref(),
+        accu_measure,
         ACCU_VOLTAGE_FACTOR,
         ACCU_CIRITICAL_VOLTAGE,
     );
