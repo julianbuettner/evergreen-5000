@@ -10,7 +10,7 @@ use serde::Deserialize;
 use crate::{
     config::PlantConfig,
     model::{LastSeenResponse, WateringJob},
-    GlobalState,
+    GlobalState, FRONTEND_ML_MAX,
 };
 
 pub async fn last_seen(state: State<GlobalState>) -> Json<Option<LastSeenResponse>> {
@@ -48,14 +48,14 @@ pub async fn set_plant_amount_ml(
 ) -> (StatusCode, String) {
     info!("Setting plant amount to {}ml", amount_ml);
 
-    if amount_ml > 500 {
+    if amount_ml > FRONTEND_ML_MAX {
         warn!(
-            "Request to water {}ml > 500ml received. Declined.",
-            amount_ml
+            "Request to water {}ml > {}ml received. Declined.",
+            amount_ml, FRONTEND_ML_MAX
         );
         return (
             StatusCode::BAD_REQUEST,
-            "More then 500ml are not allowed".to_string(),
+            format!("At most {}ml are allowed", FRONTEND_ML_MAX)
         );
     }
 

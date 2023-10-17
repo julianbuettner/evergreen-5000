@@ -38,7 +38,7 @@ const ACCU_NIMH_CELLS_IN_ROW: usize = 8;
 const ACCU_VOLTAGE_R1: f32 = 98.3; // kOhm
 const ACCU_VOLTAGE_R2: f32 = 32.6; // kOhm
 const ACCU_VOLTAGE_FACTOR: f32 = (ACCU_VOLTAGE_R1 + ACCU_VOLTAGE_R2) / ACCU_VOLTAGE_R2;
-const ACCU_CIRITICAL_VOLTAGE: f32 = 5.0; // stop watering below critical volt (under load)
+const ACCU_CIRITICAL_VOLTAGE: f32 = 4.0; // stop watering below critical volt (under load)
 
 // measure how much the pump outputs continously
 // over 10s. Measure the result and divide by 10s.
@@ -138,8 +138,8 @@ fn routine(
             Some(Err(PumpError::AccuCriticalVoltage)) => {
                 println!("Warning! Accu below critical voltage.");
                 led_signaler.error_led_on();
-                sleep(ERROR_SLEEP_DURATION);
-                return ERROR_SLEEP_DURATION;
+                sleep(ERROR_SHOW_RED_LED_DURATION);
+                return Duration::from_secs(jobs.sleep_recommendation_seconds);
             }
             Some(Ok(())) => {}
             None => println!("Warning. No pump connected to {}", job.plant_index),

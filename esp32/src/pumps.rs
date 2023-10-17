@@ -88,7 +88,7 @@ impl<'a, A: ADCPin> Pumps<'a, A> {
         while start.elapsed() < PUMP_MAX_PUMP_DURATION && (ml_watered as u32) < amount_ml {
             sleep(Duration::from_millis(5));
             let volt = self.accu.measure_volt();
-            if volt < ACCU_CIRITICAL_VOLTAGE {
+            if volt < self.accu.get_critical_volt() {
                 driver.set_duty(0).unwrap();
                 return Some(Err(PumpError::AccuCriticalVoltage));
             }

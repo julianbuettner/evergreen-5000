@@ -47,7 +47,7 @@ pub struct Accu<'a, A: ADCPin> {
     adc2: PeripheralRef<'a, ADC1>,
     voltage_pin: PeripheralRef<'a, A>,
     factor: f32,
-    min_volt: f32,
+    critical_min_volt: f32,
 }
 
 impl<'a, A: ADCPin> Accu<'a, A> {
@@ -61,8 +61,11 @@ impl<'a, A: ADCPin> Accu<'a, A> {
             adc2,
             voltage_pin,
             factor,
-            min_volt,
+            critical_min_volt: min_volt,
         }
+    }
+    pub fn get_critical_volt(&self) -> f32 {
+        self.critical_min_volt
     }
     pub fn measure_volt(&mut self) -> f32 {
         let mut adc =

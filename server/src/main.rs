@@ -25,6 +25,8 @@ mod model;
 mod state;
 mod watering_test;
 
+pub const FRONTEND_ML_MAX: usize = 1000;
+
 #[derive(Clone)]
 pub struct GlobalState {
     pub config: ConfigManager,
