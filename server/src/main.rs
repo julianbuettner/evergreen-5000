@@ -31,7 +31,7 @@ pub const FRONTEND_ML_MAX: usize = 1000;
 pub struct GlobalState {
     pub config: ConfigManager,
     pub json_state: JsonStateManager,
-    pub pending_warting_test: PendingWateringTest,
+    pub pending_watering_test: PendingWateringTest,
 }
 
 async fn handler_404(uri: Uri) -> (StatusCode, &'static str) {
@@ -66,7 +66,7 @@ async fn main() {
     let state = GlobalState {
         config: configmanager,
         json_state: statemanager,
-        pending_warting_test: PendingWateringTest::new(),
+        pending_watering_test: PendingWateringTest::new(),
     };
     let app = Router::new()
         .route("/lastseen", get(last_seen))
