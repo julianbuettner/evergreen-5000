@@ -1,1 +1,10 @@
-// place files you want to import through the `$lib` alias in this folder.
+export interface PlantConfig {
+	name: string;
+	amountMl: number;
+}
+
+export interface LastSeenInfo {
+	lastSeenTimestamp: number;
+	lastBatteryPercentage: number;
+	lastWateringDate: string;
+}
