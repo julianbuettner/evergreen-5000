@@ -1,4 +1,4 @@
-use esp_idf_hal::{
+use esp_idf_svc::hal::{
     gpio::{AnyOutputPin, Output, PinDriver},
     peripheral::PeripheralRef,
 };
@@ -27,7 +27,6 @@ use esp_idf_hal::{
 
 pub struct StatusSignaler<'a> {
     red_driver: PinDriver<'a, AnyOutputPin, Output>,
-    // red: PeripheralRef<'a, AnyOutputPin>,
     green_driver: Vec<PinDriver<'a, AnyOutputPin, Output>>,
 }
 
@@ -62,7 +61,7 @@ impl<'a> StatusSignaler<'a> {
         self.red_driver.set_high().unwrap();
     }
 
-    pub fn set_green_numer(&mut self, num: u8) {
+    pub fn set_green_number(&mut self, num: u8) {
         for (i, pin) in self.green_driver.iter_mut().enumerate() {
             match (num >> i) % 2 == 1 {
                 true => pin.set_high().unwrap(),

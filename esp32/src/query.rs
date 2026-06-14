@@ -4,7 +4,7 @@ use esp_idf_svc::http::client::*;
 use serde::Deserialize;
 
 // TODO: resistance against trailing slash
-// e.g. https://myserver.dev/evergreen/api, no tailing slash
+// e.g. https://myserver.dev/evergreen/api, no trailing slash
 const BASE_URL: &str = env!("API_BASE_URL");
 const API_SECRET: &str = env!("API_SECRET");
 
@@ -33,7 +33,7 @@ pub struct DequeueJobs {
 pub fn fetch_jobs(accu_percentage: f32) -> Result<DequeueJobs, QueryError> {
     let mut client = Client::wrap(
         EspHttpConnection::new(&Configuration {
-            crt_bundle_attach: Some(esp_idf_sys::esp_crt_bundle_attach),
+            crt_bundle_attach: Some(esp_idf_svc::sys::esp_crt_bundle_attach),
             ..Default::default()
         })
         .unwrap(),
@@ -51,9 +51,9 @@ pub fn fetch_jobs(accu_percentage: f32) -> Result<DequeueJobs, QueryError> {
     let request = client.post(&url, &[]).unwrap();
     let mut response = request.submit().unwrap();
     let read = io::try_read_full(&mut response, &mut buffer).map_err(|_| QueryError::Connection)?;
-    println!("Bytes read1: {}", read);
+    println!("Bytes read: {}", read);
     let body = String::from_utf8_lossy(&buffer[..read]).into_owned();
-    println!("Response1: {}", body);
+    println!("Response: {}", body);
 
     let server_jobs: DequeueJobs =
         serde_json::from_str(&body).map_err(|_| QueryError::UnexpectedResponse)?;

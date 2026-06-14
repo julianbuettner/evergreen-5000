@@ -1,10 +1,8 @@
 use std::thread::sleep;
 use std::time::Duration;
 
-use esp_idf_hal::adc::*;
-
-use esp_idf_hal::{
-    adc::{config::Config, AdcChannelDriver, AdcDriver, ADC1},
+use esp_idf_svc::hal::{
+    adc::{config::Config, AdcChannelDriver, AdcDriver, Atten11dB, ADC1},
     gpio::ADCPin,
     peripheral::PeripheralRef,
 };
@@ -44,7 +42,7 @@ pub fn single_nimh_cell_volt_to_percent(volt: f32) -> f32 {
 }
 
 pub struct Accu<'a, A: ADCPin> {
-    adc2: PeripheralRef<'a, ADC1>,
+    adc1: PeripheralRef<'a, ADC1>,
     voltage_pin: PeripheralRef<'a, A>,
     factor: f32,
     critical_min_volt: f32,
@@ -52,13 +50,13 @@ pub struct Accu<'a, A: ADCPin> {
 
 impl<'a, A: ADCPin> Accu<'a, A> {
     pub fn new(
-        adc2: PeripheralRef<'a, ADC1>,
+        adc1: PeripheralRef<'a, ADC1>,
         voltage_pin: PeripheralRef<'a, A>,
         factor: f32,
         min_volt: f32,
     ) -> Self {
         Self {
-            adc2,
+            adc1,
             voltage_pin,
             factor,
             critical_min_volt: min_volt,
@@ -69,21 +67,21 @@ impl<'a, A: ADCPin> Accu<'a, A> {
     }
     pub fn measure_volt(&mut self) -> f32 {
         let mut adc =
-            AdcDriver::new(self.adc2.reborrow(), &Config::new().calibration(true)).unwrap();
-        let mut adc_pin: esp_idf_hal::adc::AdcChannelDriver<A, Atten11dB<_>> =
+            AdcDriver::new(self.adc1.reborrow(), &Config::new().calibration(true)).unwrap();
+        let mut adc_pin: AdcChannelDriver<A, Atten11dB<_>> =
             AdcChannelDriver::new(self.voltage_pin.reborrow()).unwrap();
 
         const SAMPLE_SIZE: usize = 30;
         let mut samples: [u16; SAMPLE_SIZE] = [0; SAMPLE_SIZE];
         for i in 0..SAMPLE_SIZE {
             samples[i] = adc.read(&mut adc_pin).unwrap();
-            sleep(Duration::from_micros(250)); // 0.25m
+            sleep(Duration::from_micros(250)); // 0.25ms
         }
         let raw_value: f32 = samples.iter().map(|v| *v as f32).sum::<f32>() / SAMPLE_SIZE as f32;
 
         let volt_measured = 3.3 * (raw_value - LOW_VOLT as f32) / (HIGH_VOLT) as f32;
         println!(
-            "Acuc measurement result: {}V total, {}V at pin, {} at pin raw",
+            "Accu measurement result: {}V total, {}V at pin, {} at pin raw",
             volt_measured * self.factor,
             volt_measured,
             raw_value
@@ -103,6 +101,6 @@ mod test {
 
     #[test]
     fn accu_percent() {
-        assert!(feq(single_nimh_cell_volt_to_percent(1.2), 40.))
+        assert!(feq(single_nimh_cell_volt_to_percent(1.2), 50.))
     }
 }

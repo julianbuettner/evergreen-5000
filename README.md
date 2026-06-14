@@ -2,7 +2,6 @@
 ### ESP32
 [ESP Rust Book section](https://esp-rs.github.io/book/installation/riscv-and-xtensa.html).
 
-
 ```
 cargo install ldproxy
 cargo install espflash
@@ -15,7 +14,20 @@ espup install
 source ~/export-esp.sh
 ```
 
-## Pluggin in behind reverse proxy
+### ESP32 configuration
+The firmware is configured at compile time via environment variables.
+Copy `esp32/.env.example` to `esp32/.env` and fill in your values:
+
+```bash
+cd esp32
+cp .env.example .env
+# edit .env
+```
+
+The `.env` file is loaded automatically by `build.rs`, so you no longer
+need to export the variables manually before every build.
+
+## Plugging in behind reverse proxy
 Here is an example Nginx configuration:
 ```nginx
 server {
