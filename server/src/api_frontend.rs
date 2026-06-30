@@ -22,7 +22,7 @@ pub async fn last_seen(state: State<GlobalState>) -> Json<Option<LastSeenRespons
     let state = state_res.unwrap();
     info!("Last seen request - ESP32 last seen: {}", state.last_seen);
     let last_seen_response = LastSeenResponse {
-        last_seen_timestamp: state.last_seen.timestamp(),
+        last_seen_timestamp: state.last_seen.and_utc().timestamp(),
         last_battery_percentage: state.last_accu_percentage,
         last_watering_date: state.last_planned_watering.to_string(),
     };
@@ -55,7 +55,7 @@ pub async fn set_plant_amount_ml(
         );
         return (
             StatusCode::BAD_REQUEST,
-            format!("At most {}ml are allowed", FRONTEND_ML_MAX)
+            format!("At most {}ml are allowed", FRONTEND_ML_MAX),
         );
     }
 
@@ -105,7 +105,10 @@ pub async fn test_watering(
 
     if ip != esp32_ip {
         warn!("IP mismatch. Frontend: {}, ESP32: {}", ip, esp32_ip);
-        return (StatusCode::FORBIDDEN, format!("Your IP {} must be the same as ESP32's", ip));
+        return (
+            StatusCode::FORBIDDEN,
+            format!("Your IP {} must be the same as ESP32's", ip),
+        );
     }
 
     let plants = state.config.get_plant_config().unwrap();
@@ -114,7 +117,7 @@ pub async fn test_watering(
         .enumerate()
         .find(|(_, c)| c.name == plantname.as_ref());
     if plant_index.is_none() {
-        info!("Plant {} not found", plantname.to_string());
+        info!("Plant {} not found", *plantname);
         return (StatusCode::BAD_REQUEST, "Plant not found".into());
     }
     let plant_index = plant_index.unwrap();
@@ -122,7 +125,7 @@ pub async fn test_watering(
         plant_index: plant_index.0,
         amount_ml: plant_index.1.amount_ml,
     };
-    let ack = state.pending_warting_test.set_pending_job(watering_job);
+    let ack = state.pending_watering_test.set_pending_job(watering_job);
     info!("Waiting now for the job to be picked up...");
     match ack.await.await {
         Err(_) => {

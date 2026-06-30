@@ -43,7 +43,7 @@ pub async fn dequeue_jobs(
         error!("Could not read API secret: {}", e);
         return (
             StatusCode::INTERNAL_SERVER_ERROR,
-            Err("Error reading confi".into()),
+            Err("Error reading config".into()),
         );
     }
     let expected_secret = expected_secret.unwrap();
@@ -59,7 +59,7 @@ pub async fn dequeue_jobs(
         ip, query.accu_percentage
     );
     // If watering test is pending, do just that one
-    if let Some(task) = state.pending_warting_test.pop_pending_task().await {
+    if let Some(task) = state.pending_watering_test.pop_pending_task().await {
         let test_job = DequeueJobs {
             watering_jobs: vec![task.destruct_and_ack()],
             sleep_recommendation_seconds: 0,

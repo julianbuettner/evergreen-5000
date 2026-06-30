@@ -1,14 +1,14 @@
+use log::debug;
 use std::{
     fs::{File, OpenOptions},
     io::{Read, Write},
     net::{IpAddr, Ipv4Addr},
     sync::{Arc, Mutex},
 };
-use log::debug;
 use thiserror::Error;
 
 use serde::{Deserialize, Serialize};
-use toml_edit::{value, Document, TomlError};
+use toml_edit::{value, DocumentMut, TomlError};
 
 const CONFIG_FILENAME: &str = "evergreen.toml";
 const DEFAULT_HOST: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
@@ -72,7 +72,7 @@ impl ConfigManager {
         Ok(toml_edit::de::from_str(buffer.as_str())?)
     }
 
-    fn get_document(&self) -> Result<Document, ConfigError> {
+    fn get_document(&self) -> Result<DocumentMut, ConfigError> {
         let buffer = self.get_raw()?;
         Ok(buffer.parse()?)
     }

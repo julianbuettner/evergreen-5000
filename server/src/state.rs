@@ -1,9 +1,10 @@
-use chrono::{NaiveDate, NaiveDateTime};
+use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
 use std::{
     fs::{File, OpenOptions},
     io::{ErrorKind, Read, Write},
-    sync::{Arc, Mutex}, net::{IpAddr, Ipv4Addr},
+    net::{IpAddr, Ipv4Addr},
+    sync::{Arc, Mutex},
 };
 use thiserror::Error;
 
@@ -50,10 +51,10 @@ impl JsonStateManager {
         let mut file = OpenOptions::new()
             .create(true)
             .write(true)
+            .truncate(true)
             .open(STATE_FILENAME)?;
         let buf = serde_json::to_string(&state)?;
-        file.set_len(0)?;
-        file.write(buf.as_bytes())?;
+        file.write_all(buf.as_bytes())?;
         file.sync_all()?;
         drop(file);
         drop(_guard);
@@ -69,10 +70,13 @@ impl JsonStateManager {
 
         if state.is_none() {
             let default_state = JsonState {
-                last_seen: NaiveDateTime::from_timestamp_opt(0, 0).unwrap(),
+                last_seen: DateTime::from_timestamp(0, 0)
+                    .unwrap()
+                    .with_timezone(&Utc)
+                    .naive_utc(),
                 last_accu_percentage: 0.0,
                 last_planned_watering: NaiveDate::from_yo_opt(1970, 1).unwrap(),
-                last_ip: IpAddr::V4(Ipv4Addr::new(127,0,0,1)),
+                last_ip: IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)),
             };
             self.set(default_state.clone())?;
             state = Some(default_state);
