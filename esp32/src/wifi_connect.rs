@@ -5,9 +5,9 @@ use std::{
 };
 
 use embedded_svc::wifi::{ClientConfiguration as WifiClientConfiguration, Configuration};
-use esp_idf_hal::modem::Modem;
 use esp_idf_svc::{
     eventloop::{EspEventLoop, System},
+    hal::modem::Modem,
     nvs::{EspNvsPartition, NvsDefault},
     wifi::EspWifi,
 };
@@ -16,7 +16,6 @@ use esp_idf_svc::{
 pub enum WifiErr {
     TimeoutConnect,
     TimeoutIp,
-    //WrongCredentials,
 }
 
 pub struct WifiConnection<'a> {
@@ -25,9 +24,8 @@ pub struct WifiConnection<'a> {
 
 impl Drop for WifiConnection<'_> {
     fn drop(&mut self) {
-        match self.wifi_driver.disconnect() {
-            Err(_) => println!("Failed to disconnect wifi!"),
-            _ => (),
+        if let Err(e) = self.wifi_driver.disconnect() {
+            println!("Failed to disconnect wifi: {e:?}");
         }
     }
 }

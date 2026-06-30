@@ -3,7 +3,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use esp_idf_hal::{
+use esp_idf_svc::hal::{
     gpio::{ADCPin, AnyOutputPin, PinDriver},
     ledc::{LedcDriver, LedcTimerDriver, CHANNEL0, TIMER0},
     peripheral::PeripheralRef,
@@ -11,10 +11,11 @@ use esp_idf_hal::{
 };
 
 use crate::{
-    accu::Accu, ACCU_CIRITICAL_VOLTAGE, PUMP_COOLDOWN_MS, PUMP_MAX_PUMP_DURATION,
+    accu::Accu, ACCU_CRITICAL_VOLTAGE, PUMP_COOLDOWN_MS, PUMP_MAX_PUMP_DURATION,
     PUMP_ML_PER_VOLT_SECOND, PUMP_WARMUP_MS,
 };
 
+#[derive(Debug)]
 pub enum PumpError {
     AccuCriticalVoltage,
 }
@@ -42,7 +43,7 @@ impl<'a, A: ADCPin> Pumps<'a, A> {
         mut pumps: Vec<PeripheralRef<'a, AnyOutputPin>>,
         accu: Accu<'a, A>,
     ) -> Self {
-        // Esnure pins are low
+        // Ensure pins are low
         for p in pumps.iter_mut() {
             let mut p = PinDriver::output(p.reborrow()).unwrap();
             p.set_low().unwrap();
@@ -60,7 +61,8 @@ impl<'a, A: ADCPin> Pumps<'a, A> {
 
         let timer_driver = LedcTimerDriver::new(
             self.timer0.reborrow(),
-            &esp_idf_hal::ledc::config::TimerConfig::default().frequency(KiloHertz(10_u32).into()),
+            &esp_idf_svc::hal::ledc::config::TimerConfig::default()
+                .frequency(KiloHertz(10_u32).into()),
         )
         .unwrap();
         let mut driver =
@@ -105,7 +107,11 @@ impl<'a, A: ADCPin> Pumps<'a, A> {
                 .unwrap();
             sleep(Duration::from_millis(1));
         }
-        println!("Done pumping: wateres {}ml in {}ms", ml_watered, start.elapsed().as_millis());
+        println!(
+            "Done pumping: watered {}ml in {}ms",
+            ml_watered,
+            start.elapsed().as_millis()
+        );
         Some(Ok(()))
     }
 }

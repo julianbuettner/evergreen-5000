@@ -1,14 +1,13 @@
-#![feature(exclusive_range_pattern)]
 use enumset::enum_set;
-use esp_idf_hal::{
-    cpu::Core, gpio::AnyOutputPin, peripheral::Peripheral, task::watchdog::TWDTConfig,
-};
-use esp_idf_sys::{self as _};
-
-use esp_idf_hal::peripherals::Peripherals;
 use esp_idf_svc::{
     eventloop::{EspEventLoop, EspSystemEventLoop, System},
+    hal::{
+        cpu::Core, gpio::AnyOutputPin, peripheral::Peripheral, peripherals::Peripherals,
+        task::watchdog::TWDTConfig,
+    },
+    log::EspLogger,
     nvs::{EspDefaultNvsPartition, EspNvsPartition, NvsDefault},
+    sys::link_patches,
 };
 use std::{thread::sleep, time::Duration};
 
@@ -38,40 +37,64 @@ const ACCU_NIMH_CELLS_IN_ROW: usize = 8;
 const ACCU_VOLTAGE_R1: f32 = 98.3; // kOhm
 const ACCU_VOLTAGE_R2: f32 = 32.6; // kOhm
 const ACCU_VOLTAGE_FACTOR: f32 = (ACCU_VOLTAGE_R1 + ACCU_VOLTAGE_R2) / ACCU_VOLTAGE_R2;
-const ACCU_CIRITICAL_VOLTAGE: f32 = 4.0; // stop watering below critical volt (under load)
+const ACCU_CRITICAL_VOLTAGE: f32 = 4.0; // stop watering below critical volt (under load)
 
-// measure how much the pump outputs continously
-// over 10s. Measure the result and divide by 10s.
+// Measure how much the pump outputs continuously over 10s.
+// Measure the result and divide by 10s.
 // Measure the voltage of the battery while pumping.
-// Divide previously value by volt.
+// Divide the previous value by volt.
 // I measured 1300ml / 10s / 5.8V
 pub const PUMP_ML_PER_VOLT_SECOND: f32 = 22.413793;
 pub const PUMP_WARMUP_MS: u32 = 25; // no abrupt start
 pub const PUMP_COOLDOWN_MS: u32 = 25; // no abrupt stop
-                                      // Hard coded maximum, which will never by exceeded
+
+// Hard coded maximum, which will never be exceeded.
 pub const PUMP_MAX_PUMP_DURATION: Duration = Duration::from_secs(15);
 
-// When returning routine, the destructors
-// of pumps and led signal should set every
-// pin to low.
+#[derive(Debug)]
+enum RoutineError {
+    Watchdog,
+    Wifi(wifi_connect::WifiErr),
+    Query(query::QueryError),
+    Pump(PumpError),
+}
+
+impl From<wifi_connect::WifiErr> for RoutineError {
+    fn from(err: wifi_connect::WifiErr) -> Self {
+        RoutineError::Wifi(err)
+    }
+}
+
+impl From<query::QueryError> for RoutineError {
+    fn from(err: query::QueryError) -> Self {
+        RoutineError::Query(err)
+    }
+}
+
+impl From<PumpError> for RoutineError {
+    fn from(err: PumpError) -> Self {
+        RoutineError::Pump(err)
+    }
+}
+
 fn routine(
     peripherals: Peripherals,
     sys_loop: EspEventLoop<System>,
     nvs: EspNvsPartition<NvsDefault>,
-) -> Duration {
+) -> Result<Duration, RoutineError> {
     // WATCHDOG
-    // So, the code restarted automatically after a few seconds
-    // because of some watchdog thing. I could not `feed` it,
-    // it stopped anyways. But settings the timer high worked somehow.
-    // So it's not 3 min and I don't touch it. Help is appreciated.
+    // The code restarted automatically after a few seconds because of a watchdog.
+    // Setting the timer high worked around it.
     let config = TWDTConfig {
         duration: Duration::from_secs(180),
         panic_on_trigger: true,
         subscribed_idle_tasks: enum_set!(Core::Core0),
     };
-    let mut driver =
-        esp_idf_hal::task::watchdog::TWDTDriver::new(peripherals.twdt, &config).unwrap();
-    let _watchdog = driver.watch_current_task().unwrap();
+    let mut driver = esp_idf_svc::hal::task::watchdog::TWDTDriver::new(peripherals.twdt, &config)
+        .map_err(|_| RoutineError::Watchdog)?;
+    let _watchdog = driver
+        .watch_current_task()
+        .map_err(|_| RoutineError::Watchdog)?;
 
     let pins = peripherals.pins;
     let red = AnyOutputPin::from(pins.gpio12);
@@ -88,17 +111,19 @@ fn routine(
         red.into_ref(),
         vec![green1.into_ref(), green2.into_ref(), green3.into_ref()],
     );
+
     println!("Init Accu measure");
     let mut accu = Accu::new(
         peripherals.adc1.into_ref(),
         accu_measure,
         ACCU_VOLTAGE_FACTOR,
-        ACCU_CIRITICAL_VOLTAGE,
+        ACCU_CRITICAL_VOLTAGE,
     );
     let accu_volt = accu.measure_volt();
     println!("Accu est: {}V", accu_volt);
     let accu_percent = single_nimh_cell_volt_to_percent(accu_volt / ACCU_NIMH_CELLS_IN_ROW as f32);
-    println!("Accu percent measures / calculated: {}%", accu_percent);
+    println!("Accu percent measured / calculated: {}%", accu_percent);
+
     println!("Init Pumps");
     let mut pumps = Pumps::new(
         peripherals.ledc.timer0.into_ref(),
@@ -107,30 +132,18 @@ fn routine(
         accu,
     );
 
-    led_signaler.set_green_numer(SIGNAL_WHILE_WIFI);
+    led_signaler.set_green_number(SIGNAL_WHILE_WIFI);
     let jobs = {
         println!("Connect to Wifi");
-        let wifi_res =
-            connect_to_wifi_with_timeout(Duration::from_secs(10), peripherals.modem, sys_loop, nvs);
-        if wifi_res.is_err() {
-            led_signaler.error_led_on();
-            println!("Could not connect to wifi!");
-            sleep(ERROR_SHOW_RED_LED_DURATION);
-            return ERROR_SLEEP_DURATION;
-        }
-        let _wifi_driver = wifi_res.unwrap();
-        led_signaler.set_green_numer(SIGNAL_WHILE_FETCH);
+        let _wifi =
+            connect_to_wifi_with_timeout(Duration::from_secs(10), peripherals.modem, sys_loop, nvs)
+                .map_err(RoutineError::from)?;
+        led_signaler.set_green_number(SIGNAL_WHILE_FETCH);
         println!("Fetching ESP todos...");
-        fetch_jobs(accu_percent) // drop and disconnect wifi
+        fetch_jobs(accu_percent)?
     };
-    if let Err(e) = jobs {
-        println!("Error fetching jobs: {:?}", e);
-        led_signaler.error_led_on();
-        sleep(ERROR_SHOW_RED_LED_DURATION);
-        return ERROR_SLEEP_DURATION;
-    }
-    let jobs = jobs.unwrap();
-    led_signaler.set_green_numer(SIGNAL_WHILE_WATERING);
+
+    led_signaler.set_green_number(SIGNAL_WHILE_WATERING);
     for job in jobs.watering_jobs.iter() {
         if job.amount_ml == 0 {
             continue;
@@ -140,34 +153,41 @@ fn routine(
                 println!("Warning! Accu below critical voltage.");
                 led_signaler.error_led_on();
                 sleep(ERROR_SHOW_RED_LED_DURATION);
-                return Duration::from_secs(jobs.sleep_recommendation_seconds);
+                return Ok(Duration::from_secs(jobs.sleep_recommendation_seconds));
             }
             Some(Ok(())) => {}
             None => println!("Warning. No pump connected to {}", job.plant_index),
         }
     }
+
     // Call destructor to zero all pins, just to be sure
     drop(pumps);
 
     led_signaler.set_full_green();
     sleep(Duration::from_secs(7));
-    Duration::from_secs(jobs.sleep_recommendation_seconds)
+    Ok(Duration::from_secs(jobs.sleep_recommendation_seconds))
 }
 
 fn main() {
     // It is necessary to call this function once. Otherwise some patches to the runtime
-    // implemented by esp-idf-sys might not link properly. See https://github.com/esp-rs/esp-idf-template/issues/71
-    esp_idf_sys::link_patches();
+    // implemented by esp-idf-sys might not link properly.
+    // See https://github.com/esp-rs/esp-idf-template/issues/71
+    link_patches();
     // Bind the log crate to the ESP Logging facilities
-    esp_idf_svc::log::EspLogger::initialize_default();
+    EspLogger::initialize_default();
 
-    let peripherals = Peripherals::take().unwrap();
-    let sys_loop = EspSystemEventLoop::take().unwrap();
-    let nvs = EspDefaultNvsPartition::take().unwrap();
+    let peripherals = Peripherals::take().expect("Failed to take peripherals");
+    let sys_loop = EspSystemEventLoop::take().expect("Failed to take event loop");
+    let nvs = EspDefaultNvsPartition::take().expect("Failed to take NVS partition");
 
-    let deepsleep_duration = routine(peripherals, sys_loop, nvs);
+    let deepsleep_duration = match routine(peripherals, sys_loop, nvs) {
+        Ok(dur) => dur,
+        Err(e) => {
+            log::error!("Routine failed: {:?}", e);
+            ERROR_SLEEP_DURATION
+        }
+    };
 
     println!("Sleep now for {:?}", deepsleep_duration);
-
     deepsleep::deep_sleep(deepsleep_duration);
 }
